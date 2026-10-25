@@ -16,5 +16,12 @@ tick_values=[int(s.get('ticks',0)) for s in states]
 report['unexpected_tick_resets']=sum(b<a for a,b in zip(tick_values,tick_values[1:]))
 report['playing_disconnected_samples']=sum(r.get('pad')!='1' for r in playing)
 report['audio_unmuted_all_states']=all(s.get('mute')=='0' for s in states)
-report['acceptance_passed']=bool(report['flight_seconds_after_initial_status']>=1800 and report['completed_victories']>=1 and report['completed_defeats']>=1 and fps and min(fps)>=25 and report['heap_decline']<=256 and not report['fatal_errors'] and not report['playing_disconnected_samples'] and report['audio_unmuted_all_states'] and report['unexpected_tick_resets']==0)
+report['sectors']={}
+for level in ('1','2','3'):
+ sector=[r for r in playing if r.get('level')==level]
+ values=[float(r['fps']) for r in sector]
+ phases=sorted({int(r['boss'].split('/')[1]) for r in sector if r.get('active_boss')=='1'})
+ report['sectors'][level]={'samples':len(sector),'min_fps':min(values) if values else None,'boss_phases_observed':phases,'heap_min':min([int(r['heap']) for r in sector]) if sector else None}
+report['three_sector_coverage']=all(v['samples']>0 and v['boss_phases_observed']==[1,2] for v in report['sectors'].values())
+report['acceptance_passed']=bool(report['flight_seconds_after_initial_status']>=1800 and report['completed_victories']>=1 and report['completed_defeats']>=1 and fps and min(fps)>=25 and report['heap_decline']<=256 and not report['fatal_errors'] and not report['playing_disconnected_samples'] and report['audio_unmuted_all_states'] and report['unexpected_tick_resets']==0 and report['three_sector_coverage'])
 (root/'device-review/endurance-audit.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))

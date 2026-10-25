@@ -180,12 +180,14 @@ void loop() {
     float fps = frames * 1000.f / (now - lastReport);
     Serial.printf("PERF fps=%.1f render_us=%u simulation_us=%u transfer_us=%u heap=%u minheap=%u "
                   "psram=%u pad=%d packets=%u pollgap_us=%u screen=%d stage=%.2f enemies=%d "
-                  "shots=%d peaks=%d/%d shield=%d power=%d boss=%d/%d\n",
+                  "shots=%d peaks=%d/%d shield=%d power=%d boss=%d/%d level=%d level_time=%.2f "
+                  "active_boss=%d rank=%d cleared=%d\n",
                   fps, renderUs, simulationUs, display.transferUs, ESP.getFreeHeap(), minHeap,
                   ESP.getFreePsram(), game.connected, controller.packets, controller.maxPollGap,
                   int(game.screen), game.stageTime, game.enemyCount(), game.enemyShotCount(),
                   game.peakEnemies, game.peakEnemyShots, game.shields, game.power, game.boss.hp,
-                  game.boss.phase);
+                  game.boss.phase, game.level, game.levelTime, game.boss.active, game.rank,
+                  game.bossesDefeated);
     frames = 0;
     lastReport = now;
     controller.maxPollGap = 0;
