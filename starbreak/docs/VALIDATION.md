@@ -56,3 +56,7 @@ Final normal-firmware webcam check confirms the three-sector title, menu readabi
 The expanded campaign has accumulated 82,734 actual 60 Hz ticks (1,378.9 seconds since boot; 1,374.68 seconds after the initial monitored status). Four complete victories and two deliberate defeats/retries are recorded. All six boss phases are covered. Across 460 gameplay samples, FPS ranged from 29.7 to 30.3 (median 30.3), and free internal heap stayed exactly 71,888 bytes. No crashes, tick resets or disconnected gameplay samples occurred.
 
 The Xbox subsequently went to sleep. The game paused at sector 1 time 81.24, position (68.00, 190.93), with ticks frozen at 82,734. The test firmware and live reader are retained to continue this same boot after reconnect; no reboot or replacement firmware was installed at this checkpoint. The 30-minute gate remains incomplete. Disconnected waiting is excluded.
+
+## Test stopped by user
+
+The user requested that the long endurance test stop. The reader had already exited while the board was paused; the normal `guition` firmware was then installed, removing the test pilot. The results above remain valid measured observations, but the 30-minute gate was not completed and no further endurance run is scheduled.
