@@ -86,15 +86,17 @@ void Renderer::draw(Display &d, const Game &g) {
     snprintf(text, sizeof(text), "%02d", section);
     d.text(445, 9, text, Gold);
     d.rect(0, 278, 480, 42, color(0x050919));
-    if (g.boss.active) {
-      d.text(10, 286, g.boss.phase == 1 ? "DREADNAUGHT" : "EXPOSED CORE", Pink);
-      d.rect(150, 291, 315, 7, Blue);
-      d.rect(150, 291, int(315 * std::max(0, g.boss.hp) / 1500.f), 7,
-             g.boss.phase == 1 ? Gold : Pink);
-    } else if (g.bannerTime > 0)
-      d.text(10, 287, g.banner, Gold);
-    else
-      d.text(10, 287, "A FIRE     B BOMB     MENU PAUSE", color(0x749ac0));
+    if (g.screen == Screen::Playing) {
+      if (g.boss.active) {
+        d.text(10, 286, g.boss.phase == 1 ? "DREADNAUGHT" : "EXPOSED CORE", Pink);
+        d.rect(150, 291, 315, 7, Blue);
+        d.rect(150, 291, int(315 * std::max(0, g.boss.hp) / 1500.f), 7,
+               g.boss.phase == 1 ? Gold : Pink);
+      } else if (g.bannerTime > 0)
+        d.text(10, 287, g.banner, Gold);
+      else
+        d.text(10, 287, "A FIRE     B BOMB     MENU PAUSE", color(0x749ac0));
+    }
   }
   if (g.screen == Screen::Playing)
     return;
