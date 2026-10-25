@@ -1,3 +1,4 @@
+/* Guition SD port: memory-control/open-bus and standalone built-in BIOS mapping. */
 
 #include "shared.h"
 void ym2413_write(int chip, int offset, int data);
@@ -5,6 +6,26 @@ void ym2413_write(int chip, int offset, int data);
 /* SMS context */
 t_sms sms;
 
+/* Empty external slots read pulled-up data; writes must never modify this table. */
+static const uint8 open_bus[0x2000] = {[0 ... 0x1fff]=0xff};
+static void map_slots(void)
+{
+ int active=cart.bios ? !(sms.memctrl&0x08) : !(sms.memctrl&0x40);
+ for(int slot=0;slot<3;slot++){
+  uint8 *base=active?cart.rom+((sms.fcr[slot+1]%cart.pages)<<14):(uint8*)open_bus;
+  cpu_readmap[slot*2]=base;
+  cpu_readmap[slot*2+1]=active?base+0x2000:(uint8*)open_bus;
+  cpu_writemap[slot*2]=cpu_writemap[slot*2+1]=sms.dummy;
+ }
+ if(active&&!cart.bios&&(sms.fcr[0]&8)){
+  uint8 *base=sms.sram+((sms.fcr[0]&4)?0x4000:0);
+  cpu_readmap[4]=cpu_writemap[4]=base;
+  cpu_readmap[5]=cpu_writemap[5]=base+0x2000;
+  sms.save=1;
+ }
+ cpu_readmap[6]=cpu_readmap[7]=(sms.memctrl&0x10)?(uint8*)open_bus:sms.ram;
+ cpu_writemap[6]=cpu_writemap[7]=(sms.memctrl&0x10)?sms.dummy:sms.ram;
+}
 /* Run the virtual console emulation for one frame */
 void sms_frame(int skip_render)
 {
@@ -94,29 +115,10 @@ void sms_reset(void)
     sms.paused = sms.save = sms.port_3F = sms.port_F2 = sms.irq = 0x00;
     sms.psg_mask = 0xFF;
 
-    /* Load memory maps with default values */
-    cpu_readmap[0] = cart.rom + 0x0000;
-    cpu_readmap[1] = cart.rom + 0x2000;
-    cpu_readmap[2] = cart.rom + 0x4000;
-    cpu_readmap[3] = cart.rom + 0x6000;
-    cpu_readmap[4] = cart.rom + 0x0000;
-    cpu_readmap[5] = cart.rom + 0x2000;
-    cpu_readmap[6] = sms.ram;            
-    cpu_readmap[7] = sms.ram;
-
-    cpu_writemap[0] = sms.dummy;         
-    cpu_writemap[1] = sms.dummy;
-    cpu_writemap[2] = sms.dummy;         
-    cpu_writemap[3] = sms.dummy;
-    cpu_writemap[4] = sms.dummy;         
-    cpu_writemap[5] = sms.dummy;
-    cpu_writemap[6] = sms.ram;           
-    cpu_writemap[7] = sms.ram;
-
-    sms.fcr[0] = 0x00;
-    sms.fcr[1] = 0x00;
-    sms.fcr[2] = 0x01;
-    sms.fcr[3] = 0x00;
+    sms.fcr[0]=0;sms.fcr[1]=0;sms.fcr[2]=1;sms.fcr[3]=cart.bios?2:0;
+    sms.memctrl=cart.bios?0xe0:0xab;
+    if(!cart.bios)sms.ram[0]=sms.memctrl;
+    map_slots();
 }
 
 
@@ -140,6 +142,8 @@ void cpu_writeport(int port, int data)
 {
     switch(port & 0xFF)
     {
+        case 0x3E: /* Guition: memory control and BIOS/cartridge selection */
+            sms.memctrl=data;map_slots();break;
         case 0x01: /* GG SIO */
         case 0x02:
         case 0x03:
@@ -224,6 +228,7 @@ int cpu_readport(int port)
     
         case 0xC0: /* INPUT #0 */  
         case 0xDC:
+            if(sms.memctrl&4)return 0xff;
             temp = 0xFF;
             if(input.pad[0] & INPUT_UP)      temp &= ~0x01;
             if(input.pad[0] & INPUT_DOWN)    temp &= ~0x02;
@@ -237,6 +242,7 @@ int cpu_readport(int port)
     
         case 0xC1: /* INPUT #1 */
         case 0xDD:
+            if(sms.memctrl&4)return 0xff;
             temp = 0xFF;
             if(input.pad[1] & INPUT_LEFT)    temp &= ~0x01;
             if(input.pad[1] & INPUT_RIGHT)   temp &= ~0x02;
@@ -262,52 +268,10 @@ int cpu_readport(int port)
 
 void sms_mapper_w(int address, int data)
 {
-    /* Calculate ROM page index */
-    uint8 page = (data % cart.pages);
-
-    /* Save frame control register data */
-    sms.fcr[address] = data;
-
-    switch(address)
-    {
-        case 0:
-            if(data & 8)
-            {
-                sms.save = 1;
-                /* Page in ROM */
-                cpu_readmap[4]  = &sms.sram[(data & 4) ? 0x4000 : 0x0000];
-                cpu_readmap[5]  = &sms.sram[(data & 4) ? 0x6000 : 0x2000];
-                cpu_writemap[4] = &sms.sram[(data & 4) ? 0x4000 : 0x0000];
-                cpu_writemap[5] = &sms.sram[(data & 4) ? 0x6000 : 0x2000];
-            }
-            else
-            {
-                /* Page in RAM */
-                cpu_readmap[4]  = &cart.rom[((sms.fcr[3] % cart.pages) << 14) + 0x0000];
-                cpu_readmap[5]  = &cart.rom[((sms.fcr[3] % cart.pages) << 14) + 0x2000];
-                cpu_writemap[4] = sms.dummy;
-                cpu_writemap[5] = sms.dummy;
-            }
-            break;
-
-        case 1:
-            cpu_readmap[0] = &cart.rom[(page << 14) + 0x0000];
-            cpu_readmap[1] = &cart.rom[(page << 14) + 0x2000];
-            break;
-
-        case 2:
-            cpu_readmap[2] = &cart.rom[(page << 14) + 0x0000];
-            cpu_readmap[3] = &cart.rom[(page << 14) + 0x2000];
-            break;
-
-        case 3:
-            if(!(sms.fcr[0] & 0x08))
-            {
-                cpu_readmap[4] = &cart.rom[(page << 14) + 0x0000];
-                cpu_readmap[5] = &cart.rom[(page << 14) + 0x2000];
-            }
-            break;
-    }
+    /* The internal BIOS mapper is not selected while probing empty external slots. */
+    if(cart.bios&&(sms.memctrl&8))return;
+    sms.fcr[address&3]=data;
+    map_slots();
 }
 
 

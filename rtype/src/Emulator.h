@@ -1,7 +1,11 @@
 #pragma once
 #include <cstdint>
+#include <cstddef>
 namespace emu {
 bool begin();
+// Adopts a validated PSRAM allocation on success; caller retains it on failure.
+bool load(uint8_t *data, size_t bytes, bool bios = false);
+bool hasGame();
 void run(bool render, uint8_t pad);
 void reset();
 const uint8_t *pixels();

@@ -1,3 +1,4 @@
+/* Guition port modification: fixed-vector and memory-control-aware ROM reads. */
 #pragma GCC optimize ("O2")
 
 
@@ -70,9 +71,17 @@ unsigned char *cpu_writemap[8];
 
 
 
-#define cpu_readmem16(a)        unalChar(&cpu_readmap[(a) >> 13][(a) & 0x1FFF])
-#define cpu_readop(a)           unalChar(&cpu_readmap[(a) >> 13][(a) & 0x1FFF])
-#define cpu_readop_arg(a)       unalChar(&cpu_readmap[(a) >> 13][(a) & 0x1FFF])
+/* Guition SD port: preserve Sega's fixed first 1 KB when bank zero changes. */
+static inline uint8 mapped_read(unsigned address)
+{
+ address&=0xffff;
+ int active=cart.bios?!(sms.memctrl&8):!(sms.memctrl&0x40);
+ if(address<0x400&&active)return cart.rom[address];
+ return unalChar(&cpu_readmap[address>>13][address&0x1fff]);
+}
+#define cpu_readmem16(a) mapped_read(a)
+#define cpu_readop(a) mapped_read(a)
+#define cpu_readop_arg(a) mapped_read(a)
 
 /* execute main opcodes inside a big switch statement */
 #ifndef BIG_SWITCH

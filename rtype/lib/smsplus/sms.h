@@ -21,6 +21,7 @@ typedef struct
     uint8 use_fm;
     uint8 irq;
     uint8 psg_mask;
+    uint8 memctrl; /* Guition: SMS memory-control port 3E. */
 }t_sms;
 
 /* Global data */

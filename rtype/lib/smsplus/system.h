@@ -63,6 +63,7 @@ typedef struct
     uint8 *rom;
     uint8 pages;
     uint8 type;
+    uint8 bios; /* Guition: standalone built-in-game BIOS profile, no external cart. */
 }t_cart;
 
 /* Bitmap structure */
