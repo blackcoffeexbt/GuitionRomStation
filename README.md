@@ -1,90 +1,92 @@
-# Little Wilds
+# R-Type for the Guition ESP32-S3
 
-A peaceful isometric farming game for the **Guition JC3248W535 / JC3248W535C**, ESP32-S3 N16R8, AXS15231B 480 × 320 touchscreen. C++17, PlatformIO, Arduino, custom RGB565 renderer. Runs entirely offline; no LVGL, Wi-Fi or internet dependency.
+The current project runs the **Sega Master System version of R-Type** on the Guition JC3248W535 / JC3248W535C touchscreen board, using an Xbox Series X/S controller and the board’s speaker. **Branch: `rtype-sms`.**
 
-## Phase 2: a persistent little garden
+The emulator uses the SMSPlus core from [hi631/esp32-smsemu](https://github.com/hi631/esp32-smsemu), adapted to the verified Guition display, Bluetooth controller and I²S audio drivers. It runs a locally supplied cartridge image; game ROMs and firmware binaries containing them are excluded from Git.
 
-Explore a 64 × 64 world, gather natural supplies, cultivate soil, plant eight species, water, grow and harvest. Your farm automatically saves to internal flash and survives reboot. The inserted SD card is not modified.
+## Current status
 
-- **Hand:** tap resources to approach and gather; tap ripe plants to harvest. Tap the cottage to open Save & rest.
-- **Seeds:** choose grass, wildflowers, carrots, pumpkins, berry bushes, small trees, apple trees or oaks, then tap cultivated soil.
-- **Hoe:** tap clear grass or dirt to cultivate it.
-- **Water:** tap a plant for a minute of faster growth. Plants never wither.
-- **Bag:** see seeds, resources and produce. Tap outside a panel to close it.
-- **Drag** to pan; **Find me** resumes following the wanderer.
-- Tap the **save status** at the top for an immediate save, the title for instructions, or **Sound** to mute.
+| Area | Status |
+| --- | --- |
+| R-Type gameplay | Installed; the user confirmed stable gameplay and sound |
+| Xbox controls | Movement, shot/charge, Force pod and rapid fire confirmed; input lag subsequently reported |
+| Latency improvements | Built and host-tested in `05b7993`; **not flashed or hardware-validated**, at the user’s request |
+| ROM loading | A local `.sms` image is embedded into application flash during the build |
+| SD ROM browser | Discussed, not implemented; the SD card has not been modified |
+| Save states / cartridge SRAM persistence | Not implemented |
 
-Seeds return on harvest. Perennials regrow; annuals leave the soil ready for another seed. Wild resources return after five minutes of simulation time, if their ground is still free grass. There is no combat or penalty.
+The board retains the stable build from `6b980e1`. Building and uploading the current source will install the newer latency revision. No long automated test is running or scheduled.
 
-Use the cottage's **Save & rest** before switching off: wait for the safe-to-switch-off message. Rest pauses simulation; tap to continue. Without an RTC, plants resume from their last saved game time after power-off; this build does not invent elapsed wall-clock time. Saves are debounced after changes, with a 30-second clock/growth checkpoint. Sudden power loss can lose progress since the last completed save.
+## Hardware
 
-Buildings, fences and editable settlement structures remain Phase 3 work.
+- ESP32-S3, 16 MB flash and 8 MB PSRAM.
+- AXS15231B QSPI display, 480 × 320 landscape, capacitive touch.
+- Built-in I²S amplifier/speaker connection.
+- Xbox controller over Bluetooth using Bluepad32.
+
+The original 256 × 192 picture scales to 426 × 320 with narrow side borders, preserving 4:3 aspect. The emulator targets 60 Hz; the display runs independently. Short checks of the installed build measured about 60 emulated FPS and 23–28 displayed FPS depending on controller activity and scene. These measurements do not validate the newer latency revision or constitute an endurance test.
+
+See the verified pins and orientation in [BoardConfig.h](rtype/include/BoardConfig.h) and the detailed [R-Type project notes](rtype/README.md).
+
+## Controls
+
+| Control | Action |
+| --- | --- |
+| Left stick / D-pad | Move |
+| A | Fire; hold to charge using R-Type’s native weapon rules |
+| B | Launch / recall the Force pod |
+| X | Rapid fire |
+| Menu | Pause / resume and show controls |
+| Y while paused | Reset the cartridge |
+| Touch | Pause/menu/resume and mute; no touch flight controls |
+
+Wake the controller, press A to leave the emulator menu, then press A at R-Type’s own title screen. Pairing is remembered. If necessary, hold the controller’s Pair button while the board is waiting for it. Losing the connection freezes emulation and clears input; release A and press it again to confirm resuming after reconnection.
 
 ## Build and flash
 
-Install PlatformIO Core, then:
+Install PlatformIO Core, then run these commands from the repository root:
 
 ```sh
-pio run -e guition
-pio device list
-pio run -e guition -t upload --upload-port /dev/cu.usbmodem101
-pio device monitor --port /dev/cu.usbmodem101 --baud 115200
+python3 rtype/scripts/bootstrap.py --rom '/full/path/to/game.sms'
+pio run -d rtype
+pio run -d rtype -t upload --upload-port /dev/cu.usbmodem101
 ```
 
-The port can change after reboot. On this Mac, PlatformIO is also at `/Users/mark/.platformio/penv/bin/pio`. First build downloads pinned packages; subsequent builds can run offline. If flashing cannot connect, hold BOOT, press/release RST, release BOOT and retry.
+If `--rom` is omitted, bootstrap imports the single `.sms` file in the local `type-r/` directory. It prepares the pinned toolchain in Starbreak’s isolated dependency directory. ROM files in `type-r/` and `rtype/roms/`, screenshots, dependencies and build outputs are ignored by Git.
 
-**Normal firmware uploads retain saves.** Do not erase flash, upload a filesystem image (`uploadfs`), or change the partition layout if you want to retain the farm. A preformatted LittleFS partition from Phase 1 is present on the development board. A fresh unformatted device must have LittleFS provisioned deliberately: **only for an empty/new board**, run `pio run -e guition -t uploadfs` once using the supplied `data/` image, then restart. This overwrites the filesystem and must not be used to update a farm you want to keep. The game refuses to auto-format a filesystem that fails to mount.
+Pinned dependencies: Espressif32 6.10.0, official Arduino/Bluepad32 4.1.0 (Arduino ESP32 2.0.17), Arduino_GFX 1.5.9 and C++17. Emulator source is vendored with its revision and per-file licensing recorded in [THIRD_PARTY.md](rtype/THIRD_PARTY.md).
 
-## Validation and diagnostics
+The application upload preserves the existing flash partition layout and the farm’s LittleFS partition. R-Type does not mount LittleFS or access SD. Its mute setting uses the separate `rtype-sms` NVS namespace.
+
+## Tests and diagnostics
 
 ```sh
-./scripts/test_host.sh
-python3 scripts/device_check.py --tour --seconds 24
-./scripts/capture_device.sh
+./rtype/scripts/test_host.sh
+python3 rtype/scripts/check_board.py --seconds 20
 ```
 
-Host checks use a C++17 compiler. The test suite covers projection/picking, A* vs independent BFS, movement retargeting, gestures, clipping, the farming loop, all plant species, growth/watering, regrowth, inventory overflow, save round trips, checksums, truncation, invalid save data and trusted/untrusted offline time. The shared renderer writes `.build/preview.ppm` for host previews.
+Host checks cover ROM boot, video and PSG sound output, bank reset, frame skipping, native button mapping, reconnect confirmation, scaling/rotation and concurrent frame ownership. The core also passed 7,200 simulated frames under AddressSanitizer; the latency revision’s mailbox passed ThreadSanitizer. Host tests require the locally supplied ROM and a C/C++ compiler.
 
-USB serial commands (newline terminated):
+The provided board checker leaves USB DTR/RTS reset lines untouched and disables hang-up-on-close. Ordinary serial-monitor settings previously caused `USB_UART_CHIP_RESET`, interrupting gameplay; use the supplied checker for brief observations.
 
-| Command | Action |
+USB commands: `status`, `pair`, `pause`, `resume`, `reset`, `mute`. An explicit `bench` command, accepted while paused, resets the cartridge and runs one eight-second intro diagnostic with no input, then pauses automatically:
+
+```sh
+python3 rtype/scripts/check_board.py --seconds 12 --bench
+```
+
+Diagnostics report emulation/display FPS, rendering and transfer times, memory, controller activity and audio errors. The pending latency build also reports polling gaps and frame age. These are software timings, not measured radio-to-screen latency.
+
+## Repository layout and previous games
+
+| Path | Purpose |
 | --- | --- |
-| `status` / `farmstatus` | Position, clock, inventory, plants and save sequence/status |
-| `walk x y` | Walk to a world tile |
-| `tap x y` | Simulate a screen tap through UI and sprite hit testing |
-| `tool 0..3` | Hand / Seeds / Hoe / Water |
-| `seed 0..7` | Select a plant species |
-| `act x y` | Approach and use current tool on a world tile |
-| `save` | Request a complete save |
-| `rest` | Save and pause at a safe tile centre |
-| `demo` | Toggle the diagnostic walking tour |
-| `bench` | Benchmark full-frame vs full-width strip transfers |
-| `mute` / `reboot` | Toggle audio / restart firmware |
+| `rtype/` | Current Master System emulator project, hardware adapters, tests and build scripts |
+| `rtype/lib/smsplus/` | Vendored emulator core and original notices |
+| `rtype/roms/` | Ignored local cartridge image used by the build |
+| `type-r/` | Ignored user-supplied ROM directory |
+| `starbreak/` | Previous original space-shooter project |
+| Root `src/`, `assets/`, `platformio.ini` | Preserved Little Wilds farming project |
+| `docs/` | Original hardware/farming documentation and archived Little Wilds README |
 
-Serial farming commands exercise the same simulation as touchscreen actions, but do not by themselves prove physical touchscreen response. `scripts/phase2_device_check.py` is a **one-time new-farm** check using starter resources; do not rerun it on a modified farm expecting identical results. It does not accelerate time.
-
-An optional `guition_validation` build includes guarded save fault injection, documented in [the save format](docs/SAVES.md). The final normal build excludes those commands. Actual hardware evidence and performance are in [PERFORMANCE.md](docs/PERFORMANCE.md).
-
-## Architecture and assets
-
-- `include/BoardConfig.h`: verified board pins and landscape mapping.
-- `src/hardware/`: Display, Touch, Audio and asynchronous LittleFS SaveManager.
-- `src/core/`: Game, World, Player, Pathfinding, Camera, Input, Inventory, Plants and portable SaveCodec.
-- `src/render/`: framebuffer Surface, Renderer, sprite picking and Assets.
-- `assets/source/`: original transparent PNG placeholders; `assets/generated/`: RGB565 arrays and glyph atlas.
-- `test/`: host movement, farming and save tests.
-- `docs/`: hardware, save format, phases and measurements.
-
-Game state, save snapshots and buffers live in PSRAM. A 307,200-byte drawing buffer prefers internal SRAM for speed and has a slower PSRAM fallback. Sprites stay in flash. Save encoding captures a consistent snapshot on the main thread; a worker writes and verifies it without touching live game state.
-
-To regenerate artwork:
-
-```sh
-python3 -m pip install -r scripts/requirements.txt
-python3 scripts/make_placeholders.py
-python3 scripts/convert_assets.py
-```
-
-Generated assets and source PNGs are checked in, so firmware builds require neither Python nor fonts. DejaVu Sans and its licence are bundled. PNG alpha below 128 becomes transparent RGB565 colour key `0xf81f`; opaque collisions are remapped. Anchors share a ground-contact point at `(width/2,height-8)`.
-
-See [Phase 2 controls](docs/PHASE2.md), [hardware configuration](docs/HARDWARE.md), [save format](docs/SAVES.md) and [next milestones](docs/MILESTONES.md).
+Root-level `pio run` still builds **Little Wilds**; use `-d rtype` for the current project. Its original instructions are preserved in [Little Wilds](docs/LITTLE_WILDS.md). The last complete Starbreak build is `4ae5d85`; `e6a0c33` preserves unfinished weapon-expansion work. Both previous projects and the existing farm saves remain recoverable.

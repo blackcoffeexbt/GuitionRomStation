@@ -30,7 +30,7 @@ The bootstrap imports a single `.sms` under the local `type-r/` directory when `
 
 The flash partition table is identical to the previous games. Only the app firmware is uploaded; the farm's LittleFS partition and SD card are not accessed. Mute uses its own `rtype-sms` NVS namespace. This port does not implement save states or persistent cartridge SRAM. R-Type's native game rules, difficulty, checkpoints and progression are provided by the ROM.
 
-To return to Starbreak's last complete build, use commit `4ae5d85` and its project directory. Later user commit `e6a0c33` preserves unfinished arsenal work; it is not the last buildable Starbreak release. Little Wilds remains in the root project and on `main`.
+To return to Starbreak's last complete build, use commit `4ae5d85` and its project directory. Later user commit `e6a0c33` preserves unfinished arsenal work; it is not the last buildable Starbreak release. Little Wilds remains in the root project and on `main`; its instructions are preserved in [the archived README](../docs/LITTLE_WILDS.md).
 
 ## Tests and measurements
 
