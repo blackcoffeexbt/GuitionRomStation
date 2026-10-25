@@ -72,7 +72,7 @@ a.poly([(96,14),(105,10),(113,14),(113,36),(105,40),(96,36)],'#b8aa91');a.poly([
 a.poly([(43,84),(56,90),(56,110),(43,104)],'#8b7356');a.ellipse((52,98,54,100),'#e5c27e')
 a.poly([(26,73),(35,77),(35,88),(26,84)],'#7ba3a0');a.line([(30,75),(30,86)],'#f7e8bc');a.line([(26,79),(35,83)],'#f7e8bc')
 a.poly([(91,87),(109,78),(109,91),(91,100)],'#628a84');a.line([(100,83),(100,95)],'#edddb5');a.line([(91,93),(109,85)],'#edddb5')
-a.poly([(39,106),(57,114),(65,111),(47,103)],'#c1b291');a.save('cottage')
+a.poly([(39,106),(57,114),(65,111),(47,103)],'#c1b291');a.im=a.im.resize((124*S,112*S),Image.Resampling.LANCZOS);a.w=124;a.h=112;a.save('cottage')
 a=Art(60,38);a.shadow(31,30,25,5);a.poly([(8,16),(41,7),(52,18),(19,29)],'#997452');a.poly([(19,29),(52,18),(52,25),(19,35)],'#735d48');a.ellipse((7,15,27,34),'#cab088');a.ellipse((11,18,23,30),'#9c805c');a.ellipse((14,21,20,27),'#cfb58b');a.save('log')
 # Four facings, four walk frames each; feet share the same ground anchor.
 for direction in range(4):
@@ -91,7 +91,7 @@ for direction in range(4):
   if direction>=2:a.ellipse((13,27-bob,25,37-bob),'#7d9179')
   a.save(f'player{direction}_{frame}')
 # Font atlas: small readable proportional glyphs, alpha retained for colour tinting.
-font=ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf',12)
+font=ImageFont.truetype(str(ROOT/'assets/fonts/DejaVuSans.ttf'),12)
 widths=[];data=[]
 for c in range(32,128):
  im=Image.new('L',(12,16));d=ImageDraw.Draw(im);d.text((0,-2),chr(c),font=font,fill=255)

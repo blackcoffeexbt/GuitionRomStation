@@ -5,3 +5,4 @@
 __pycache__/
 device-review/*.jpg
 device-review/*.bin
+device-review/*.log

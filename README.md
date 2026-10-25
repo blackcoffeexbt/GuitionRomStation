@@ -10,7 +10,7 @@ A peaceful miniature isometric meadow for the **Guition JC3248W535 / JC3248W535C
 - Drag the meadow to pan. **Find me** recentres and follows the player. **Guide** opens instructions; tap outside to close.
 - Built-in I²S speaker: quiet tap/arrival/unreachable tones; **Sound** toggles mute.
 - Fixed 60 Hz simulation, capped 30 FPS rendering, no per-frame dynamic allocations in game code.
-- PSRAM buffers, LittleFS partition and USB serial diagnostics.
+- PSRAM world state, fast internal drawing buffer, LittleFS partition and USB serial diagnostics.
 
 **Farming, inventory, building and persistent game saves are Phase 2/3 work, not present in this prototype.** The world resets at boot. LittleFS mounts but no game-save file is written. The inserted SD card is not modified.
 
@@ -41,6 +41,8 @@ USB serial commands end with a newline:
 | `mute` | Toggle audio |
 | `reboot` | Restart the firmware |
 
+For a scripted USB check (requires `pyserial`), use `python3 scripts/device_check.py --tour --seconds 24`. On macOS, `scripts/capture_device.sh` takes one authorised webcam snapshot.
+
 Every three seconds `PERF` reports measured FPS, rendering/rotation/transfer times, free heap/PSRAM, visible tiles/sprites and tap count. Boot reports chip, flash, PSRAM, touch probe, filesystem mount and transfer benchmark. See [hardware](docs/HARDWARE.md) and [performance](docs/PERFORMANCE.md).
 
 ## Host checks and preview
@@ -53,7 +55,7 @@ Uses a host C++17 compiler; tests projection round trips, tile picking, A* short
 
 ## Artwork
 
-Original placeholder PNGs live in `assets/source/`, generated RGB565 arrays in `assets/generated/`. The firmware reads sprites directly from flash; framebuffers and game state live in PSRAM.
+Original placeholder PNGs live in `assets/source/`, generated RGB565 arrays in `assets/generated/`. The firmware reads sprites directly from flash. Game state and the benchmark buffer live in PSRAM; the drawing buffer prefers internal RAM for speed.
 
 ```sh
 python3 -m pip install -r scripts/requirements.txt
@@ -61,7 +63,7 @@ python3 scripts/make_placeholders.py  # optional: regenerate original placeholde
 python3 scripts/convert_assets.py     # regenerate firmware asset arrays from PNGs
 ```
 
-The placeholder generator uses Arial from macOS. Existing PNGs and generated headers are checked in, so building needs neither Python nor a font installation. The converter accepts any RGBA PNG and reserves magenta RGB565 `0xf81f` for transparency. Alpha below 128 becomes transparent; solid magenta is remapped. Sprite anchors use `(width/2,height-8)` as ground contact. Original source art is separate from embedded arrays.
+The placeholder generator uses the included DejaVu Sans font and licence. Existing PNGs and generated headers are checked in, so building needs neither Python nor a font installation. The converter accepts any RGBA PNG and reserves magenta RGB565 `0xf81f` for transparency. Alpha below 128 becomes transparent; solid magenta is remapped. Sprite anchors use `(width/2,height-8)` as ground contact. Original source art is separate from embedded arrays.
 
 ## Layout
 
