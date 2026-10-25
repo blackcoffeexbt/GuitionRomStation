@@ -50,3 +50,9 @@ Final host checks also verify the entire stage performs no C++ heap allocations.
 A renderer regression check verifies pause/results screens show the sound footer without overlapping flight hints or boss health. The expanded build includes that correction.
 
 Final normal-firmware webcam check confirms the three-sector title, menu readability and retained best score of 25,720. Serial status reports clean title-screen operation at 30.3 FPS, 74,528 bytes free internal heap and 8,385,947 bytes free PSRAM with the Xbox disconnected. This is an idle-screen observation, not the gameplay performance gate. Final firmware size is 722,629 bytes, with 81,112 bytes static RAM.
+
+## Endurance checkpoint after controller sleep
+
+The expanded campaign has accumulated 82,734 actual 60 Hz ticks (1,378.9 seconds since boot; 1,374.68 seconds after the initial monitored status). Four complete victories and two deliberate defeats/retries are recorded. All six boss phases are covered. Across 460 gameplay samples, FPS ranged from 29.7 to 30.3 (median 30.3), and free internal heap stayed exactly 71,888 bytes. No crashes, tick resets or disconnected gameplay samples occurred.
+
+The Xbox subsequently went to sleep. The game paused at sector 1 time 81.24, position (68.00, 190.93), with ticks frozen at 82,734. The test firmware and live reader are retained to continue this same boot after reconnect; no reboot or replacement firmware was installed at this checkpoint. The 30-minute gate remains incomplete. Disconnected waiting is excluded.

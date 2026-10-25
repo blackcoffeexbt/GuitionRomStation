@@ -48,7 +48,7 @@ pio run -d starbreak -e validation -t upload --upload-port /dev/cu.usbmodem101
 python3 starbreak/scripts/soak.py --minutes 32
 ```
 
-The final delivery uses `guition`, with the pilot and corruption hooks excluded. See docs/VALIDATION.md for measured results and limits. **The expanded campaign's physical-board endurance test remains pending while the Xbox is disconnected.** The previous single-sector version completed two victories and a defeat/retry with approximately 15 minutes of measured gameplay before controller sleep. Those results do not validate the new campaign. USB normal-build commands: `status`, `pair`, `mute`, `reboot`. Every three seconds `PERF` reports frame times, memory, controller status and stage/pool counts. The validation build additionally accepts `autoplay`, `defeat` and `corrupt_settings`.
+The final delivery uses `guition`, with the pilot and corruption hooks excluded. See docs/VALIDATION.md for measured results and limits. **The expanded campaign has completed four physical-board victories and two defeats/retries, with almost 23 measured gameplay minutes at 29.7–30.3 FPS and stable free memory. The 30-minute endurance gate remains pending after Xbox sleep.** The validation boot is preserved for continuation; disconnected waiting does not count. USB normal-build commands: `status`, `pair`, `mute`, `reboot`. Every three seconds `PERF` reports frame times, memory, controller status and stage/pool counts. The validation build additionally accepts `autoplay`, `defeat` and `corrupt_settings`.
 
 ## Project layout
 
