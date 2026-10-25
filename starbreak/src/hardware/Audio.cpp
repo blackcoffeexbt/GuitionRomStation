@@ -42,18 +42,28 @@ void Audio::task(void *ptr) {
   for (;;) {
     if (xQueueReceive(self->events, &event, portMAX_DELAY) != pdTRUE)
       continue;
-    int duration = event == sb::SoundEvent::Arrive ? 3600 : 1500;
+    int duration = event == sb::SoundEvent::Bomb        ? 7000
+                   : event == sb::SoundEvent::Explosion ? 3000
+                   : event == sb::SoundEvent::Pickup    ? 3600
+                   : event == sb::SoundEvent::Fire      ? 600
+                                                        : 1400;
+    uint32_t noise = 0xace1;
     for (int base = 0; base < duration; base += 256) {
       int count = std::min(256, duration - base);
       for (int i = 0; i < count; i++) {
         int t = base + i;
-        float phase = float(t) / 22050.f, progress = float(t) / duration;
-        float frequency = event == sb::SoundEvent::Blocked  ? 220.f
-                          : event == sb::SoundEvent::Arrive ? (progress < .5f ? 660.f : 880.f)
-                                                            : 520.f;
+        float phase = float(t) / 22050, progress = float(t) / duration;
+        float frequency = event == sb::SoundEvent::Fire     ? 1400 - 900 * progress
+                          : event == sb::SoundEvent::Pickup ? 700 + 700 * progress
+                          : event == sb::SoundEvent::Impact ? 260
+                                                            : 90;
         float envelope = std::sin(3.14159265f * progress);
         envelope *= envelope;
-        int16_t v = int16_t(std::sin(6.2831853f * frequency * phase) * envelope * 950.f);
+        noise = (noise >> 1) ^ uint32_t(-int(noise & 1) & 0xb400);
+        float oscillator = event == sb::SoundEvent::Explosion || event == sb::SoundEvent::Bomb
+                               ? (float(noise & 255) / 127.5f - 1)
+                               : std::sin(6.2831853f * frequency * phase);
+        int16_t v = int16_t(oscillator * envelope * 1000);
         samples[i * 2] = samples[i * 2 + 1] = v;
       }
       size_t written;

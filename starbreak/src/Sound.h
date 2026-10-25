@@ -1,4 +1,4 @@
 #pragma once
 namespace sb {
-enum class SoundEvent { None, Tap, Arrive, Blocked, Harvest };
+enum class SoundEvent { None, Fire, Impact, Pickup, Explosion, Bomb };
 }

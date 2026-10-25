@@ -70,6 +70,19 @@ void Display::text(int x, int y, const char *str, uint8_t c, int scale) {
     x += (wilds::glyphWidths[n] + 1) * scale;
   }
 }
+void Display::sprite(int cx, int cy, const Sprite &s) {
+  int x = cx - s.w / 2, y = cy - s.h / 2;
+  int left = std::max(0, -x), right = std::min(s.w, 480 - x), top = std::max(0, -y),
+      bottom = std::min(s.h, 320 - y);
+  if (left >= right || top >= bottom)
+    return;
+  for (int col = left; col < right; col++)
+    for (int row = bottom - 1; row >= top; row--) {
+      auto c = s.data[col * s.h + s.h - 1 - row];
+      if (c)
+        pixels[(x + col) * 320 + 319 - y - row] = c;
+    }
+}
 void Display::ship(int x, int y, bool firing) {
   auto dark = color(0x285b9e), light = color(0x65cde6), white = color(0xecffff);
   rect(x - 18, y - 12, 8, 4, dark);

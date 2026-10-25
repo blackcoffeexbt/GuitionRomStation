@@ -1,46 +1,60 @@
 # Starbreak
 
-A separate ESP32-S3 side-scrolling shooter project on branch `starbreak`. Little Wilds source and its flash partition layout are retained; `main` remains at the working Phase 2 farm. The SD card is untouched.
+A compact, colourful side-scrolling shooter for the Guition JC3248W535 / C ESP32-S3 touchscreen. **Branch: `starbreak`**. Little Wilds stays recoverable on `main` and in the root project; farm saves and the SD card are untouched.
 
-## Current milestone: hardware gate
+One authored, replayable stage of approximately five minutes: scout formations, weaving fighters, armoured gunships, asteroid belt and a two-phase boss. Three shields, three cannon levels, two upgrade pickups and one screen-clearing bomb. Results show score, best score and immediate retry. Original pixel sprites are intentionally smaller than the initial controller-check graphics.
 
-This build is a **controller/display/audio diagnostic**, not the authored shooter stage. It has a scrolling starfield, a movable pixel ship, Xbox controls, touch pairing/mute, reconnect confirmation and a synthetic stress scene. The stage must wait until the actual Xbox controller and combined hardware pass the gate.
+## Controls
 
-- Xbox left stick or D-pad: move; diagonals have equal maximum speed.
-- A: confirm/resume; held A is shown by the ship's firing indicator.
-- B: button counter and test tone. No bomb gameplay exists yet.
-- Menu: pause; a lost connection clears input and pauses flight.
-- Reconnect requires releasing A then pressing it to confirm; no touchscreen flight control.
-- Touch Pair controller enables Bluetooth discovery. Pair keys are never erased at boot.
+- Stick or D-pad: move. Diagonal speed is normalised.
+- Hold A: fire. A confirms menus and retries after a result.
+- B: bomb during flight; back in menus.
+- Menu: pause/resume.
+- Touch: title/pairing/pause/results menus and mute only. No touch flight controls.
 
-## Pinned initial toolchain
+Turn the Xbox controller on, then hold Pair for about three seconds on the pairing screen. Pairing is remembered and reconnection is attempted after boot. A lost link immediately pauses flight and clears motion. Release A, then press it to confirm resuming after reconnection.
 
-- PlatformIO Espressif32 6.10.0.
-- Official Arduino + Bluepad32 **4.1.0** release, downloaded by `scripts/bootstrap.py` and SHA256 verified.
-- Arduino_GFX 1.5.9, the same AXS15231B QSPI driver and pins as Little Wilds.
-- Per-project dependency directory; the Little Wilds framework installation is not replaced.
+The HUD shows score, shields, bomb, cannon level and stage section. The boss health bar appears at the bottom. Enemy bullets are gold/white; player fire is cyan. Upgrades persist through damage. Mute and best score survive reboot.
+
+## Build and flash
 
 ```sh
 python3 starbreak/scripts/bootstrap.py
-pio run -d starbreak
-pio run -d starbreak -t upload --upload-port /dev/cu.usbmodem101
+pio run -d starbreak -e guition
+pio run -d starbreak -e guition -t upload --upload-port /dev/cu.usbmodem101
 pio device monitor -d starbreak --port /dev/cu.usbmodem101 --baud 115200
 ```
 
-The bootstrap reuses installed compiler tools when available; PlatformIO fetches missing tools. Never upload a filesystem image or erase flash: the copied 16 MB partition table deliberately preserves the farm's LittleFS partition at `0xc10000`. This proof does not mount or write that partition. Bluepad32 stores its own pairing keys in NVS. The eventual shooter score/settings will use a separate versioned `starbreak` namespace.
+Pinned: Espressif32 6.10.0, official Arduino + Bluepad32 4.1.0 (Arduino 2.0.17), Arduino_GFX 1.5.9, C++17. Bootstrap downloads the official package, validates its SHA256 and prepares an isolated dependency directory. Little Wilds' existing framework is not replaced.
 
-USB proof commands: `pair`, `stress` (toggle 24 ships and 140 shot markers with active I2S test sounds), `mute`, `reboot`. Every three seconds `PROOF` reports FPS, rendering/transfer time, free/minimum heap, PSRAM, controller connection/pause, input packet count, maximum polling gap, position/axes and A/B/Menu counters.
+**Do not erase flash or upload a filesystem image.** Normal game uploads preserve the existing partition layout and the farm's LittleFS partition at `0xc10000`. Shooter score/settings use their own versioned `starbreak` NVS namespace; Bluetooth retains its pairing keys. The shooter does not use LittleFS or SD.
 
-## Graphics and memory
+To return to Little Wilds, build/upload the root project, without `-d starbreak`. Its source remains on this branch and on `main`.
 
-The 307,200-byte RGB565 framebuffer from Little Wilds leaves too little internal memory for a Bluetooth host. Starbreak uses a 153,600-byte RGB332 indexed framebuffer in native portrait memory layout, with the same software landscape mapping `(px,py)=(319-y,x)`. Palette expansion and a complete native screen window still use Arduino_GFX's proven QSPI transport. Internal allocation is attempted only with at least 70 KB spare; otherwise PSRAM is used. No second full-screen framebuffer or full-frame rotation copy is required.
+## Tests and validation
 
-The glyph atlas is reused from Little Wilds; the DejaVu licence accompanies it. The game artwork and RGB565/indexed asset conversion pipeline will be added after the hardware gate.
+```sh
+./starbreak/scripts/test_host.sh
+```
 
-## Verification status
+Host checks cover radial stick/dead zone and diagonal speed, swept collision, damage cooldown, retained upgrades, bomb consumption, boss phases, reconnect confirmation, settings CRC/corruption, complete victory and defeat/retry simulations, and input timing at 25/30/40 Hz. Address/undefined-behaviour sanitizers can run against the portable core. A host simulation is not a substitute for the hardware tests.
 
-Built and flashed on the actual Guition board; landscape pairing screen reviewed with the MacBook webcam. Initial unpaired scanning: ~29.5 FPS, ~87.5 KB internal heap free. The user then paired the Xbox controller and exercised stick/D-pad, A and B: actual input packets and ship movement were logged. With that controller connected, the 24-ship / 140-marker stress scene and audio measured ~29.4–29.5 FPS, ~84.9 KB internal heap free and ~29 ms maximum main-loop polling interval. These are diagnostic results, not the authored stage's performance acceptance or an end-to-end radio latency measurement.
+The optional `validation` build adds a test pilot using ordinary controls, collisions and the real 60 Hz clock. It requires the actual controller link and has no invulnerability, artificial score or time acceleration. It alternates successful and deliberate-loss runs for endurance checks:
 
-Pending: Menu, disconnect/reconnect and reboot reconnection; then a playable slice, authored five-minute stage, boss, persistence and 30-minute repeated-play acceptance. See docs/BRIEF.md.
+```sh
+pio run -d starbreak -e validation -t upload --upload-port /dev/cu.usbmodem101
+python3 starbreak/scripts/soak.py --minutes 32
+```
 
-To restore Little Wilds on the board, build/upload the root project (not `-d starbreak`). Its farm saves remain in the same LittleFS partition.
+The final delivery uses `guition`, with the pilot and corruption hooks excluded. See docs/VALIDATION.md for measured results and limits. USB normal-build commands: `status`, `pair`, `mute`, `reboot`. Every three seconds `PERF` reports frame times, memory, controller status and stage/pool counts. The validation build additionally accepts `autoplay`, `defeat` and `corrupt_settings`.
+
+## Project layout
+
+- `src/core/`: portable game, swept collision, input-independent settings codec and validation pilot.
+- `src/hardware/`: display, Bluepad32 input, I²C touch, queued I²S audio and NVS settings.
+- `src/Renderer.*`: native-layout sprite blits, parallax stars, HUD and menu screens.
+- `assets/source/`: original transparent pixel-art PNGs; `assets/generated/`: compact indexed sprites.
+- `scripts/`: pinned dependency bootstrap, asset generation and hardware/host checks.
+- `test/`: meaningful simulation/input/collision/settings tests.
+
+See [art and scaling](docs/ART.md), [architecture](docs/ARCHITECTURE.md), [delivery contract](docs/BRIEF.md) and [hardware evidence](docs/VALIDATION.md).

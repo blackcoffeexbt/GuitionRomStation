@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino_GFX_Library.h>
+#include "Sprites.h"
 namespace sb {
 constexpr uint8_t color(uint32_t c) {
   return uint8_t(((c >> 16) & 0xe0) | ((c >> 11) & 0x1c) | ((c >> 6) & 3));
@@ -19,6 +20,7 @@ public:
   void pixel(int x, int y, uint8_t c);
   void rect(int x, int y, int w, int h, uint8_t c);
   void text(int x, int y, const char *str, uint8_t c, int scale = 1);
+  void sprite(int x, int y, const Sprite &sprite);
   void ship(int x, int y, bool firing);
 };
 } // namespace sb
