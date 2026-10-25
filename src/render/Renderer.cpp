@@ -1,5 +1,6 @@
 #include "Renderer.h"
 #include <cstdio>
+#include <cstring>
 namespace wilds {
 namespace {
 constexpr auto Ink = rgb(0x364f47), Cream = rgb(0xf6f1dc), Muted = rgb(0x87927b),
@@ -10,49 +11,128 @@ void Renderer::leaf(Surface &s, int x, int y, uint16_t c) {
   s.line(x - 3, y + 6, x + 3, y - 5, Cream);
 }
 void Renderer::toolbar(Surface &s, const Game &g) {
-  s.rounded(12, 273, 456, 42, 12, rgb(0x55745b));
-  s.rounded(12, 270, 456, 42, 12, Cream);
-  s.rounded(17, 275, 143, 32, 8, rgb(0xdce3c7));
-  leaf(s, 34, 290, Accent);
-  s.text(49, 283, "Wander", Ink);
-  // Centre icon and a simple open field-guide icon.
-  s.line(185, 290, 199, 282, Accent);
-  s.line(199, 282, 211, 290, Accent);
-  s.line(211, 290, 199, 298, Accent);
-  s.line(199, 298, 185, 290, Accent);
-  s.ellipse(199, 290, 2, 2, Accent);
-  s.text(223, 283, "Find me", Ink);
-  s.rect(336, 283, 12, 15, rgb(0xcbd6b9));
-  s.rect(349, 283, 12, 15, rgb(0xe1d5ad));
-  s.line(348, 282, 348, 300, Accent);
-  s.text(374, 283, "Guide", Ink);
-  s.line(173, 281, 173, 301, rgb(0xe1dfc9));
-  s.line(321, 281, 321, 301, rgb(0xe1dfc9));
-  s.rounded(12, 10, 170, 28, 9, Cream);
-  leaf(s, 27, 24, Accent);
-  s.text(40, 16, "LITTLE WILDS", Ink);
-  s.rounded(395, 10, 73, 28, 9, Cream);
-  s.ellipse(410, 23, 4, 4, rgb(0xc8ad6c));
-  s.text(421, 16, g.muted ? "Quiet" : "Sound", Ink);
+  char text[100];
+  s.rounded(8, 272, 464, 44, 10, rgb(0x607d63));
+  s.rounded(8, 269, 464, 44, 10, Cream);
+  const char *tools[] = {"Hand", "Seeds", "Hoe", "Water", "Bag"};
+  for (int i = 0; i < 5; i++) {
+    int x = i * 96 + 48;
+    if (i < 4 && int(g.tool) == i)
+      s.rounded(i * 96 + 13, 274, 72, 34, 7, rgb(0xdce3c7));
+    if (i == 0) {
+      s.ellipse(x - 13, 287, 5, 5, Accent);
+      s.line(x - 13, 278, x - 13, 287, Accent);
+      s.line(x - 17, 280, x - 17, 286, Accent);
+    }
+    if (i == 1)
+      leaf(s, x - 16, 286, Accent);
+    if (i == 2) {
+      s.line(x - 20, 280, x - 10, 294, Accent);
+      s.rect(x - 22, 278, 12, 4, Accent);
+    }
+    if (i == 3) {
+      s.ellipse(x - 16, 287, 4, 6, rgb(0x7caaa9));
+      s.line(x - 16, 278, x - 19, 285, rgb(0x7caaa9));
+    }
+    if (i == 4) {
+      s.rounded(x - 22, 282, 12, 12, 3, rgb(0xb29b74));
+      s.line(x - 19, 281, x - 19, 278, Accent);
+      s.line(x - 19, 278, x - 13, 278, Accent);
+      s.line(x - 13, 278, x - 13, 281, Accent);
+    }
+    s.text(x - 6, 280, tools[i], Ink);
+  }
+  s.rounded(10, 9, 173, 28, 8, Cream);
+  leaf(s, 24, 23, Accent);
+  s.text(36, 15, "LITTLE WILDS", Ink);
+  s.rounded(189, 9, 94, 28, 8, Cream);
+  const char *saveLabel = g.saveStatus;
+  if (!strcmp(saveLabel, "Unsaved changes"))
+    saveLabel = "Save *";
+  else if (s.textWidth(saveLabel) > 78)
+    saveLabel = "Save issue";
+  s.text(198, 15, saveLabel, Ink);
+  s.rounded(290, 9, 95, 28, 8, Cream);
+  s.text(302, 15, "Find me", Ink);
+  s.rounded(393, 9, 77, 28, 8, Cream);
+  s.text(402, 15, g.muted ? "Quiet" : "Sound", Ink);
   if (g.noticeTimer > 0) {
-    int w = std::min(452, s.textWidth(g.notice) + 24);
-    s.rounded((Width - w) / 2, 242, w, 23, 7, Cream);
-    s.text((Width - s.textWidth(g.notice)) / 2, 246, g.notice, Ink);
+    int w = std::min(462, s.textWidth(g.notice) + 16);
+    s.rounded((Width - w) / 2, 242, w, 23, 6, Cream);
+    s.text(std::max(12, (Width - s.textWidth(g.notice)) / 2), 246, g.notice, Ink);
   }
-  if (g.guide) {
-    for (int y = 45; y < 264; y++)
-      for (int x = 26; x < 454; x++)
-        s.blend(x, y, Ink, 95);
-    s.rounded(38, 51, 404, 203, 13, Cream);
-    leaf(s, 65, 78, Accent);
-    s.text(83, 66, "A little place to slow down", Ink, 1);
-    s.text(60, 100, "Tap the ground to take a walk.", Ink);
-    s.text(60, 122, "Tap a tree, stone or cottage to visit it.", Ink);
-    s.text(60, 144, "Drag the meadow to look around.", Ink);
-    s.text(60, 166, "Find me brings you back to your wanderer.", Ink);
-    s.text(60, 196, "First playable meadow  /  Phase 1", Muted);
-    s.text(60, 222, "Tap anywhere to return to the wilds", Accent);
+  if (g.panel != Panel::None) {
+    s.rounded(23, 45, 434, 211, 12, rgb(0x647e64));
+    s.rounded(23, 42, 434, 211, 12, Cream);
+    if (g.panel == Panel::Seeds) {
+      s.text(37, 49, "Choose seeds  /  tap outside to close", Ink);
+      for (int i = 0; i < 8; i++) {
+        int x = 32 + (i % 4) * 104, y = 78 + (i / 4) * 72;
+        s.rounded(x + 2, y, 98, 64, 7, rgb(i == g.selectedSeed ? 0xdce3c7 : 0xebe7d1));
+        s.sprite(x + 27, y + 36, resource0);
+        s.ellipse(x + 27, y + 24, 4, 4, rgb(ItemDefs[i].color));
+        snprintf(text, sizeof(text), "%u", g.inventory.counts[i]);
+        s.text(x + 57, y + 13, text, Ink);
+        s.text(x + 7, y + 43, PlantDefs[i].name, Ink);
+      }
+    } else if (g.panel == Panel::Bag) {
+      s.text(37, 49, "Your gathering bag  /  tap outside to close", Ink);
+      for (int i = 0; i < ItemCount; i++) {
+        int x = 34 + (i % 4) * 105, y = 76 + (i / 4) * 34;
+        s.ellipse(x + 4, y + 7, 4, 4, rgb(ItemDefs[i].color));
+        snprintf(text, sizeof(text), "%u", g.inventory.counts[i]);
+        s.text(x + 14, y, text, Ink);
+        s.text(x, y + 14, ItemDefs[i].name, Muted);
+      }
+    } else if (g.panel == Panel::Home) {
+      s.text(46, 61, "Home, sweet little home", Ink);
+      s.text(46, 92, "Your garden saves automatically as you play.", Ink);
+      s.text(46, 115, "Save & rest before switching off the board.", Ink);
+      s.rounded(46, 162, 388, 42, 8, rgb(0xdce3c7));
+      s.text(161, 175, "Save & rest", Ink);
+      s.text(46, 222, "Tap outside to keep exploring", Muted);
+    } else {
+      s.text(46, 56, "A garden at your own pace", Ink);
+      s.text(46, 85, "Hand: gather resources and harvest ripe plants.", Ink);
+      s.text(46, 108, "Hoe: make soil. Seeds: choose and plant.", Ink);
+      s.text(46, 131, "Water: help plants grow. They never wither.", Ink);
+      s.text(46, 154, "Bag: see supplies. Drag to look around.", Ink);
+      s.text(46, 177, "Tap Saved to save. Visit the cottage to rest.", Ink);
+      s.text(46, 209, "Growth resumes safely when you return.", Muted);
+      s.text(46, 230, "Tap anywhere to return", Accent);
+    }
   }
+  if (g.resting) {
+    s.rounded(38, 94, 404, 109, 12, Cream);
+    s.text(93, 114, "Your little wilds are safely saved", Ink);
+    s.text(81, 144, "You can switch off, or tap to keep playing.", Ink);
+    s.text(182, 173, "Rest peacefully", Accent);
+  }
+}
+TilePos Renderer::pickInteraction(const Game &g, Vec2 point) const {
+  TilePos chosen{-1, -1};
+  float depth = -1;
+  auto hit = [&](TilePos tile, const Sprite &sp, float order) {
+    auto pos = g.camera.screen({float(tile.x), float(tile.y)});
+    int x = int(point.x - std::lround(pos.x)) + sp.anchorX,
+        y = int(point.y - std::lround(pos.y)) + sp.anchorY;
+    if (order >= depth && x >= 0 && y >= 0 && x < sp.w && y < sp.h &&
+        sp.pixels[y * sp.w + x] != 0xf81f) {
+      chosen = tile;
+      depth = order;
+    }
+  };
+  for (int i = 0; i < g.world.objectCount; i++) {
+    auto &o = g.world.objects[i];
+    if (o.active)
+      hit(o.tile, objectSprite(o.kind, o.variant), o.tile.x + o.tile.y);
+  }
+  for (int i = 0; i < Plants::Capacity; i++) {
+    auto &p = g.plants.entries[i];
+    if (p.active)
+      hit(p.tile, cropSprite(p.type, g.plants.stage(i)), p.tile.x + p.tile.y + .01f);
+  }
+  return chosen;
 }
 void Renderer::draw(Surface &s, const Game &g) {
   renderedSprites = renderedTiles = 0;
@@ -128,6 +208,8 @@ void Renderer::draw(Surface &s, const Game &g) {
   int count = 0;
   for (int i = 0; i < g.world.objectCount; i++) {
     const auto &o = g.world.objects[i];
+    if (!o.active)
+      continue;
     const auto &sp = objectSprite(o.kind, o.variant);
     auto a = g.camera.screen({float(o.tile.x), float(o.tile.y)});
     int x = std::lround(a.x), y = std::lround(a.y);
@@ -135,6 +217,16 @@ void Renderer::draw(Surface &s, const Game &g) {
         y - sp.anchorY >= Height)
       continue;
     drawList[count++] = {float(o.tile.x + o.tile.y), i, x, y};
+  }
+  for (int i = 0; i < Plants::Capacity; i++) {
+    const auto &p = g.plants.entries[i];
+    if (!p.active)
+      continue;
+    auto a = g.camera.screen({float(p.tile.x), float(p.tile.y)});
+    if (a.x < -30 || a.x > Width + 30 || a.y < -10 || a.y > Height + 62)
+      continue;
+    drawList[count++] = {float(p.tile.x + p.tile.y) + .01f, World::MaxObjects + i,
+                         int(std::lround(a.x)), int(std::lround(a.y))};
   }
   auto pp = g.camera.screen(g.player.position);
   drawList[count++] = {g.player.position.x + g.player.position.y, -1, int(std::lround(pp.x)),
@@ -150,7 +242,17 @@ void Renderer::draw(Surface &s, const Game &g) {
       s.sprite(
           a.x, a.y,
           playerSprite(g.player.direction, g.player.moving() ? int(g.player.animation) % 4 : 0));
-    else {
+    else if (a.id >= World::MaxObjects) {
+      int id = a.id - World::MaxObjects;
+      const auto &p = g.plants.entries[id];
+      s.sprite(a.x, a.y, cropSprite(p.type, g.plants.stage(id)));
+      if (p.water > 0)
+        s.ellipse(a.x + 12, a.y - 9, 2, 3, rgb(0x7caeb2));
+      if (g.plants.mature(id)) {
+        int rise = int(std::sin(g.time * 3) * 2);
+        s.ellipse(a.x, a.y - 57 + rise, 3, 2, rgb(0xf5df9b));
+      }
+    } else {
       auto &o = g.world.objects[a.id];
       int sway = o.kind == ObjectKind::Flowers ? int(std::sin(g.time * 2 + o.tile.x) * 1.1f) : 0;
       s.sprite(a.x + sway, a.y, objectSprite(o.kind, o.variant));

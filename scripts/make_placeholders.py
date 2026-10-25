@@ -90,6 +90,52 @@ for direction in range(4):
   a.ellipse((5,12-bob,31,20-bob),'#8f9f70');a.ellipse((10,5-bob,26,17-bob),'#b1bc88');a.ellipse((12,6-bob,23,11-bob),'#d2d5a4')
   if direction>=2:a.ellipse((13,27-bob,25,37-bob),'#7d9179')
   a.save(f'player{direction}_{frame}')
+# Phase 2: seeds, loose resources and four shaded growth stages.
+for kind in range(6):
+ a=Art(38,40);a.shadow(20,32,14,4)
+ if kind==0:
+  a.poly([(9,12),(28,10),(30,32),(10,34)],'#d9c39b');a.rect((10,12,28,16),'#f1dfb6');a.ellipse((16,20,23,28),'#7f9c70')
+ elif kind==1:
+  a.poly([(5,23),(26,15),(33,21),(12,31)],'#b08c64');a.poly([(12,31),(33,21),(33,27),(12,36)],'#82694f');a.ellipse((5,22,16,35),'#d6b386')
+ elif kind==2:
+  a.poly([(6,28),(13,16),(25,17),(32,28),(19,34)],'#a8bbb2');a.poly([(6,28),(13,16),(22,22),(19,34)],'#c8d1c1');a.poly([(22,22),(25,17),(32,28),(19,34)],'#809a95')
+ elif kind==3:
+  for x,y in [(13,26),(23,27),(18,20)]:a.ellipse((x-5,y-5,x+5,y+5),'#b57589');a.ellipse((x-3,y-4,x,y-1),'#dca0a4')
+ elif kind==4:
+  for x,y in [(13,18),(26,24)]:a.rect((x-2,y,x+2,y+12),'#e8d5af');a.ellipse((x-8,y-5,x+8,y+4),'#b88970');a.ellipse((x-4,y-4,x,y-1),'#e9bc91')
+ else:
+  for x,y in [(12,19),(25,24)]:
+   a.line([(x,y),(x,y+11)],'#70956b',2)
+   for dx,dy in [(0,-4),(4,0),(0,4),(-4,0)]:a.ellipse((x+dx-3,y+dy-3,x+dx+3,y+dy+3),'#e5bfd0')
+   a.ellipse((x-2,y-2,x+2,y+2),'#e5bf73')
+ a.save('resource'+str(kind))
+for kind in range(8):
+ for stage in range(4):
+  a=Art(54,62);a.shadow(29,54,20,5);a.ellipse((17,49,37,56),'#8d7759')
+  if stage==0:
+   a.line([(27,52),(27,44)],'#6f9368',2);a.ellipse((20,40,27,46),'#aac282');a.ellipse((27,38,35,45),'#87ac72')
+  else:
+   tall=12+stage*5
+   if kind>=5:
+    a.poly([(24,53),(29,52),(29,31-tall//2),(25,32-tall//2)],'#a38961')
+    for x,y,r in [(21,32-stage*3,10+stage),(34,32-stage*3,11+stage),(27,23-stage*3,10+stage)]:
+     a.ellipse((x-r,y-r,x+r,y+r),'#5f936e');a.ellipse((x-r,y-r,x+r-4,y+r-6),'#95b780')
+    if kind==6 and stage==3:
+     for x,y in [(16,21),(33,14),(38,28)]:a.ellipse((x-3,y-3,x+3,y+3),'#ce8c74')
+   elif kind==3 and stage>=2:
+    a.ellipse((10,36,43,55),'#dba55c');a.ellipse((15,34,38,54),'#edba69');a.line([(26,36),(25,31)],'#719162',3)
+    for x in [21,30]:a.line([(x,38),(x-1,51)],'#cf934e')
+   elif kind==4:
+    for x,y,r in [(18,43,10),(34,43,11),(27,34,11)]:a.ellipse((x-r,y-r,x+r,y+r),'#7fa46f')
+    if stage==3:
+     for x,y in [(15,39),(28,31),(36,43)]:a.ellipse((x-3,y-3,x+3,y+3),'#b77d98')
+   else:
+    for dx,dy in [(-13,-7),(13,-10),(-7,-17),(4,-tall)]:
+     a.line([(27,52),(27+dx,50+dy)],'#6c986a',2);a.ellipse((23+dx,44+dy,31+dx,50+dy),'#9bbc7c')
+     if kind==1 and stage==3:a.ellipse((23+dx,40+dy,30+dx,47+dy),'#e4bad0');a.ellipse((25+dx,42+dy,27+dx,45+dy),'#e7c97e')
+    if kind==2 and stage==3:
+     for x in [18,26,34]:a.poly([(x-3,47),(x+3,47),(x,56)],'#e1a46f')
+  a.save(f'crop{kind}_{stage}')
 # Font atlas: small readable proportional glyphs, alpha retained for colour tinting.
 font=ImageFont.truetype(str(ROOT/'assets/fonts/DejaVuSans.ttf'),12)
 widths=[];data=[]

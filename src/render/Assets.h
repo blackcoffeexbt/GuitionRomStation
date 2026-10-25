@@ -3,5 +3,6 @@
 #include "../core/World.h"
 namespace wilds {
 const Sprite &objectSprite(ObjectKind kind, int variant);
+const Sprite &cropSprite(int type, int stage);
 const Sprite &playerSprite(int direction, int frame);
 } // namespace wilds

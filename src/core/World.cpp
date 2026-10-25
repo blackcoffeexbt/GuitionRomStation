@@ -8,7 +8,7 @@ bool World::walkable(TilePos p) const {
   if (obj < 0)
     return true;
   const auto k = objects[obj].kind;
-  return k == ObjectKind::Flowers || k == ObjectKind::Reeds;
+  return k == ObjectKind::Flowers || k == ObjectKind::Reeds || int(k) >= 8;
 }
 bool World::addObject(TilePos p, ObjectKind k, uint8_t v) {
   if (!inBounds(p) || objectCount == MaxObjects || at(p).object >= 0 ||
@@ -57,6 +57,24 @@ void World::generate(uint32_t seed) {
   addObject({35, 30}, ObjectKind::Flowers, 2);
   addObject({28, 35}, ObjectKind::Log);
   addObject({38, 33}, ObjectKind::Bush, 1);
+  for (int y = 8; y < 56; y++)
+    for (int x = 8; x < 56; x++) {
+      TilePos p{int16_t(x), int16_t(y)};
+      auto h = hash(index(p) + seed + 901);
+      if (at(p).object < 0 && at(p).terrain == Terrain::Grass && h % 100 < 2)
+        addObject(p, ObjectKind(8 + h % 6), h % 3);
+    }
+  constexpr TilePos gifts[] = {{35, 33}, {35, 35}, {36, 34}, {33, 37}, {34, 31}, {36, 36}};
+  for (int i = 0; i < 6; i++) {
+    auto p = gifts[i];
+    int old = at(p).object;
+    if (old >= 0 && objects[old].kind == ObjectKind::Flowers) {
+      objects[old].active = false;
+      objects[old].respawnAt = 600;
+      tiles[index(p)].object = -1;
+    }
+    addObject(p, ObjectKind(8 + i));
+  }
   // Ensure the spawn and a broad connected starting path are open.
   tiles[index({34, 34})].object = -1;
 }
