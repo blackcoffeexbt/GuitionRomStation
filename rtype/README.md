@@ -14,7 +14,7 @@ Separate project on branch `rtype-sms`, using the SMSPlus core from [hi631/esp32
 
 Wake the Xbox, press A to leave the emulator's menu, then press A at the game's own title screen. Pairing keys are reused; hold the controller's Pair button if necessary. A lost Bluetooth link immediately clears input and freezes emulation. Pause confirmation requires a fresh released report before A can resume.
 
-The SMS's 256×192 image is scaled to 426×320, preserving 4:3 aspect with narrow side borders. The emulator targets 60 Hz; every second frame is offered to the independent display task. Triple buffers have explicit ownership so the emulation thread never modifies a frame being displayed. Audio is real SN76496 PSG output sent to the board's I²S amplifier at 22,080 Hz.
+The SMS's 256×192 image is scaled to 426×320, preserving 4:3 aspect with narrow side borders. The emulator targets 60 Hz; fresh frames are offered to the independent display task, which replaces stale queued frames. Triple buffers have explicit ownership so the emulation thread never modifies a frame being displayed. Audio is real SN76496 PSG output sent to the board's I²S amplifier at 22,080 Hz.
 
 ## Build
 
@@ -48,7 +48,7 @@ The user played the original ROM and confirmed movement, charge/shot, Force pod 
 
 The display task also explicitly yields after each transfer so it cannot starve the idle task when frames remain queued. Scaling uses an internal 49 KB source cache, tiled packed 32-bit stores to the rotated PSRAM framebuffer, and 4,096-pixel QSPI transfer blocks. Host tests verify every scaled pixel and guard bytes.
 
-The final eight-second, 480-frame intro diagnostic completed without reset or audio write errors. Full-window samples measured 59.9–60.1 emulated FPS and 27.9–28.3 displayed FPS. Scaling took about 8–10 ms and display transfer about 25–27 ms. Final samples were taken with the controller disconnected; an earlier eight-second diagnostic completed with the actual Xbox linked, before the final copy optimisation. Free internal heap settled near 107 KB and free PSRAM was about 8.04 MB. These are short observations, not a long endurance certification. Final manual gameplay after the monitor fix remains pending confirmation.
+The final eight-second, 480-frame intro diagnostic completed without reset or audio write errors. Full-window samples measured 59.9–60.1 emulated FPS and 27.9–28.3 displayed FPS. Scaling took about 8–10 ms and display transfer about 25–27 ms. Final samples were taken with the controller disconnected; an earlier eight-second diagnostic completed with the actual Xbox linked, before the final copy optimisation. Free internal heap settled near 107 KB and free PSRAM was about 8.04 MB. These are short observations, not a long endurance certification. The user subsequently confirmed stable manual gameplay with sound after the monitor fix.
 
 For a brief observation using the no-reset connection:
 
@@ -61,3 +61,11 @@ python3 rtype/scripts/check_board.py --seconds 12 --bench
 `bench` is an explicit USB diagnostic, only accepted while paused. It resets the cartridge, supplies no input, runs 480 real-time frames, then pauses. It does not simulate a connected Xbox or run an endless play loop. Ordinary gameplay still freezes immediately on disconnection.
 
 The host core also passed 7,200 emulated frames with varied movement, hold fire and Force presses under AddressSanitizer. This covers two minutes of *simulated* play and does not substitute for a physical-board run. No long automated test is scheduled.
+
+## Controller-latency revision — built, not yet flashed
+
+After the user reported lag, the display pipeline was changed to release its source slot immediately after conversion, before LCD transfer. The producer can replace stale queued frames, and every emulated frame is now eligible for presentation. The former design held one source through transfer and could strand a queued old frame while the producer had no free slot. A portable mailbox test checks freshness and concurrent ownership; ThreadSanitizer passes without torn frames/data races.
+
+Audio writes now run in their own task behind a single latest-frame queue, removing blocking I²S writes from input polling. DMA capacity is reduced from about 70 ms to about 17 ms. The stick's digital activation threshold is lower, touch polling is less frequent during flight, and controller state is sampled again immediately before emulation. New diagnostics report controller polling gap and frame publication-to-presentation age; neither is a measurement of radio-to-photon latency.
+
+Host tests and the firmware build pass. The USB device disappeared before upload, and the user explicitly deferred flashing. This revision is therefore **not installed or hardware-validated**. The board retains the previously confirmed stable build. No SD loader has been implemented and the SD card remains untouched.

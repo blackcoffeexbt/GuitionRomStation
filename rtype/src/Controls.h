@@ -5,8 +5,8 @@ namespace port {
 inline uint8_t buttons(const sb::Input &in, uint32_t frame, bool blocked) {
   if (!in.connected || blocked)
     return 0;
-  return (in.y < -.25f ? 1 : 0) | (in.y > .25f ? 2 : 0) | (in.x < -.25f ? 4 : 0) |
-         (in.x > .25f ? 8 : 0) | (in.bomb ? 0x10 : 0) |
+  return (in.y < -.08f ? 1 : 0) | (in.y > .08f ? 2 : 0) | (in.x < -.08f ? 4 : 0) |
+         (in.x > .08f ? 8 : 0) | (in.bomb ? 0x10 : 0) |
          ((in.fire || (in.nextWeapon && frame % 6 < 3)) ? 0x20 : 0);
 }
 struct Session {

@@ -2,6 +2,12 @@
 #include <cassert>
 #include <cstdio>
 int main() {
+  sb::Input gentle;
+  gentle.connected = true;
+  gentle.x = .1f;
+  assert(port::buttons(gentle, 0, false) == 8);
+  gentle.x = .07f;
+  assert(port::buttons(gentle, 0, false) == 0);
   port::Session s;
   sb::Input i;
   i.connected = i.fresh = true;

@@ -20,7 +20,7 @@ void status() {
   Serial.printf(
       "SMS STATE paused=%d connected=%d frames=%u mute=%d heap=%u psram=%u audio_errors=%u\n",
       session.paused, session.connected, emulated, muted, ESP.getFreeHeap(), ESP.getFreePsram(),
-      audioErrors);
+      audioErrors + audio.writeErrors());
 }
 void setup() {
   Serial.begin(115200);
@@ -52,7 +52,7 @@ void loop() {
   static int commandLength = 0;
   controller.update();
   session.receive(controller.input);
-  if (millis() - touchAt >= 20) {
+  if (millis() - touchAt >= (session.paused ? 20u : 80u)) {
     touchAt = millis();
     sb::Vec2 p;
     bool down = touch.read(p);
@@ -109,7 +109,14 @@ void loop() {
   if (now >= deadline) {
     bool benchmark = benchFrames > 0;
     if (benchmark || (!session.paused && session.connected)) {
-      bool draw = (emulated % 2) == 0;
+      // Re-poll after any touch/settings work, immediately before applying input.
+      controller.update();
+      session.receive(controller.input);
+      if (session.paused && !benchmark) {
+        delay(1);
+        return;
+      }
+      bool draw = true;
       uint32_t start = micros();
       emu::run(draw, benchmark ? 0 : port::buttons(controller.input, emulated, session.blockA));
       emuUs = micros() - start;
@@ -133,11 +140,14 @@ void loop() {
   if (millis() - report >= 3000) {
     uint32_t elapsed = millis() - report, shown = video.presented.load();
     Serial.printf("SMS PERF emu_fps=%.1f display_fps=%.1f emu_us=%u scale_us=%u transfer_us=%u "
-                  "heap=%u psram=%u pad=%d packets=%u paused=%d audio_errors=%u frames=%u\n",
+                  "heap=%u psram=%u pad=%d packets=%u paused=%d audio_errors=%u frames=%u "
+                  "pollgap_us=%u frame_age_us=%u\n",
                   (emulated - previousFrames) * 1000.f / elapsed,
                   (shown - previousPresented) * 1000.f / elapsed, emuUs, video.scaleUs.load(),
                   video.transferUs.load(), ESP.getFreeHeap(), ESP.getFreePsram(), session.connected,
-                  controller.packets, session.paused, audioErrors, emulated);
+                  controller.packets, session.paused, audioErrors + audio.writeErrors(), emulated,
+                  controller.maxPollGap, video.frameAgeUs.load());
+    controller.maxPollGap = 0;
     previousFrames = emulated;
     previousPresented = shown;
     report = millis();

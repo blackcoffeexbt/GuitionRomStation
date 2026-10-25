@@ -8,3 +8,5 @@ c++ -std=c++17 -O2 -Isrc test/controls.cpp -o .build/controls-test
 .build/controls-test
 c++ -std=c++17 -O2 -Isrc test/scaling.cpp -o .build/scaling-test
 .build/scaling-test
+c++ -std=c++17 -O2 -pthread -Isrc test/mailbox.cpp -o .build/mailbox-test
+.build/mailbox-test

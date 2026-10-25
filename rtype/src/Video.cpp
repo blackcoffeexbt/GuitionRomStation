@@ -9,43 +9,27 @@ bool Video::begin() {
     if (!s.pixels)
       return false;
   }
-  slots[0].state.store(1);
   if (!display.begin())
     return false;
   return xTaskCreatePinnedToCore(task, "sms-video", 4096, this, 1, nullptr, 0) == pdPASS;
 }
 void Video::publish(uint32_t frame) {
-  int next = -1;
-  for (int i = 0; i < 3; i++) {
-    uint32_t free = 0;
-    if (slots[i].state.compare_exchange_strong(free, 1)) {
-      next = i;
-      break;
-    }
-  }
-  if (next < 0)
-    return;
-  auto &s = slots[writing];
+  // Fill metadata before publishing the pixel owner; acquire uses release/acquire order.
+  auto &s = slots[mailbox.writing()];
   emu::palette(s.colors);
-  s.frame = frame;
-  s.state.store(2, std::memory_order_release);
-  writing = next;
+  mailbox.publish(frame, micros());
 }
 void Video::task(void *self) {
   static_cast<Video *>(self)->loop();
 }
 void Video::loop() {
-  uint32_t oldMenu = UINT32_MAX, lastFrame = 0;
-  // Keep the most recently presented frame owned while menus reuse it.
-  int retained = -1;
+  uint32_t oldMenu = UINT32_MAX;
   for (;;) {
     uint32_t flags = menu.load();
     if (flags & 1) {
       if (flags != oldMenu) {
-        if (retained >= 0)
-          display.frame(slots[retained].pixels, slots[retained].colors);
-        else
-          display.clear(252);
+        // The converted LCD buffer already holds the last frame (or prior menu).
+        // Repaint the complete overlay without retaining an emulator-owned slot.
         display.rect(48, 48, 384, 230, 250);
         display.text(77, 64, "R-TYPE / MASTER SYSTEM", 255, 2);
         display.text(77, 108,
@@ -62,34 +46,18 @@ void Video::loop() {
       continue;
     }
     oldMenu = flags;
-    int newest = -1;
-    uint32_t serial = lastFrame;
-    for (int i = 0; i < 3; i++)
-      if (slots[i].state.load(std::memory_order_acquire) == 2 && slots[i].frame >= serial) {
-        newest = i;
-        serial = slots[i].frame;
-      }
+    int newest = mailbox.acquire();
     if (newest < 0) {
       vTaskDelay(1);
       continue;
     }
-    uint32_t queued = 2;
-    if (!slots[newest].state.compare_exchange_strong(queued, 3))
-      continue;
-    if (retained >= 0)
-      slots[retained].state.store(0);
-    retained = newest;
-    lastFrame = serial;
-    for (int i = 0; i < 3; i++) {
-      if (i == newest)
-        continue;
-      uint32_t stale = 2;
-      slots[i].state.compare_exchange_strong(stale, 0);
-    }
+    uint32_t queuedAt = mailbox.queuedAt(newest);
     uint32_t start = micros();
     display.frame(slots[newest].pixels, slots[newest].colors);
     scaleUs = micros() - start;
+    mailbox.release(newest);
     display.present();
+    frameAgeUs = micros() - queuedAt;
     transferUs = display.transferUs;
     presented.fetch_add(1);
     // Rendering can always have another queued frame. Let core 0 idle/feed WDT.
