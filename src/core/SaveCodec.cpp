@@ -2,6 +2,17 @@
 #include <cstring>
 namespace wilds {
 namespace {
+constexpr std::array<uint32_t, 256> makeCrcTable() {
+  std::array<uint32_t, 256> table{};
+  for (uint32_t i = 0; i < 256; i++) {
+    uint32_t c = i;
+    for (int b = 0; b < 8; b++)
+      c = (c >> 1) ^ (0xedb88320u & uint32_t(-int(c & 1)));
+    table[i] = c;
+  }
+  return table;
+}
+constexpr auto CrcTable = makeCrcTable();
 struct Writer {
   uint8_t *data;
   size_t capacity, pos = 0;
@@ -58,13 +69,11 @@ bool validTime(double t) {
 } // namespace
 uint32_t SaveCodec::crc(const uint8_t *data, size_t n) {
   uint32_t c = ~0u;
-  for (size_t i = 0; i < n; i++) {
-    c ^= data[i];
-    for (int b = 0; b < 8; b++)
-      c = (c >> 1) ^ (0xedb88320u & uint32_t(-int(c & 1)));
-  }
+  for (size_t i = 0; i < n; i++)
+    c = (c >> 8) ^ CrcTable[(c ^ data[i]) & 255];
   return ~c;
 }
+
 void SaveState::capture(const Game &g, int64_t trustedUtc) {
   world = g.world;
   plants = g.plants;

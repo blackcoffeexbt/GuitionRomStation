@@ -20,6 +20,9 @@ class SaveManager {
 public:
   bool begin(wilds::Game &game);
   void update(wilds::Game &game, uint32_t now);
+#ifdef WILDS_SAVE_TESTING
+  bool testFault(int mode);
+#endif
   bool isBusy() const { return busy; }
   uint32_t savedSequence() const { return sequence; }
 };

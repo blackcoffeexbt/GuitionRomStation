@@ -49,3 +49,36 @@ Local evidence: `device-review/boot.log`, `device-review/final-validation.log`, 
 ## Limits for the next phase
 
 Only ~38 KB internal heap remains with the fast full-screen buffer, so future subsystem allocations need care. Retain a PSRAM fallback, avoid network stacks unless explicitly needed, and measure filesystem write latency before introducing saving. Asset and terrain caches, transfer pipelining or more selective refreshes are candidates for 30 FPS. World saves and growth are not yet implemented; no save/load duration can be reported.
+
+# Phase 2 hardware validation — 25 October 2026
+
+The Phase 2 firmware was built, flashed and tested on the same physical board. Webcam images checked the farming toolbar, planted/watered crops, mature plants, inventory and all eight seed choices. Game actions and UI taps in these tests were driven through USB diagnostics using the same simulation/gesture dispatch; no claim is made that automated tests physically touched the glass. The original touchscreen driver/pin mapping remains unchanged.
+
+## Gameplay and persistence checks
+
+- Gathered starter wild seeds, wood, stone, berries, mushrooms and flowers by walking to their adjacent tiles. Inventory gains matched the gathered objects.
+- Cultivated grass at (35,33), planted carrots, watered them and watched them progress through growth stages at normal simulation speed. No test clock acceleration was added.
+- Saved and restarted the firmware with that growing crop: soil, inventory, crop age, remaining water, depleted resource state and player tile loaded successfully.
+- Harvested ripe carrots through the screen-tap/sprite-picking dispatch: three carrots and two returned seeds; the annual crop was removed and soil retained.
+- Planted/watered carrots, pumpkins and wildflowers in three existing garden beds, then verified all three and their inventory costs across another normal-firmware reboot.
+- Harvested the perennial wildflowers on-device: the plant remained active at its regrowth stage, flowers increased from two to four, and flower seeds from three to five. Reboot preserved those rewards and all three plants.
+- The cottage's visible Save & rest button completed a save and paused simulation. Two successive status reads showed an unchanged clock. Reboot loaded the same inventory and garden.
+- Host checks cover all eight plant species, regrowth versus replanting, inventory overflow, queued seed selection, rest cancellation, serialization, standard CRC32 check vector and corrupted/invalid save input. AddressSanitizer/UndefinedBehaviorSanitizer runs pass.
+
+## Save recovery checks on the device
+
+A temporary `guition_validation` build preserved a verified backup before corrupting the newest completed save. Boot rejected corrupted slot B sequence 16 and loaded valid slot A sequence 15 with the recovery notice; inventory was unchanged. Restoring the untouched backup returned both slots to valid state and selected sequence 16 again. A half-length `/wilds.tmp` file followed by restart was safely ignored, preserving both completed slots and inventory. This simulates interrupted storage states; power was not physically pulled during a write.
+
+The final flashed `guition` build excludes fault-injection commands; its ELF has no `SaveManager::testFault` symbol. Normal firmware uploads preserved the actual farm. The SD card was neither mounted nor modified, and Wi-Fi remained off.
+
+## Measurements and limitations
+
+- Normal garden samples were generally **20–22 FPS**, depending on camera position and visible sprites. Three-species movement/planting/autosave samples included **19.0–21.9 FPS**; fuller cottage/rest overlays reached **18.9–20.6 FPS**. The game remains responsive, but 30 FPS is not achieved and the 20 FPS floor is not universal during overlays/save activity.
+- Background write plus readback: approximately **0.19–0.35 seconds** in observed samples. The simulation/main loop does not wait for those transfers.
+- Consistent snapshot encoding after the CRC table optimisation: **4.4 ms** in the explicit-rest sample.
+- Loading/validating two save slots: approximately **70–111 ms** observed across normal and recovery boots.
+- Save sizes: **24,519 bytes** without crops, **24,558 bytes** with three crops.
+- Free internal heap: **33,900–34,100 bytes** in observed Phase 2 runs; free PSRAM **7,870,599 bytes**, stable through the tests.
+- The added SRAM pressure remains a constraint for future features. Existing saves were retained through the checksum optimisation, confirming wire-format compatibility.
+
+Local evidence (ignored by Git): `device-review/phase2-farming.log`, `phase2-harvest.log`, `phase2-recovery.log`, `phase2-garden.log`, `phase2-rest.log`, `phase2-final.log`, plus `phase2-first.jpg`, `phase2-ripe.jpg`, `phase2-garden.jpg`, `phase2-bag.jpg`, `phase2-seeds.jpg` and `little-wilds-phase2.jpg`. These are actual camera captures; host previews remain distinct.

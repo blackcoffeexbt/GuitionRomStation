@@ -56,6 +56,13 @@ void serialCommands() {
     if (c == '\n') {
       command[commandLength] = 0;
       int x, y;
+#ifdef WILDS_SAVE_TESTING
+      if (sscanf(command, "fault %d", &x) == 1) {
+        saves.testFault(x);
+        commandLength = 0;
+        continue;
+      }
+#endif
       if (sscanf(command, "walk %d %d", &x, &y) == 2) {
         demo = false;
         game->walkTo({int16_t(x), int16_t(y)});

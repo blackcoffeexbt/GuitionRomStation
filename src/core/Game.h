@@ -16,6 +16,7 @@ class Game {
   bool actionPending = false;
   TilePos actionTile{};
   Tool actionTool = Tool::Hand;
+  uint8_t actionSeed = 2;
   float resourceTick = 0;
 
 public:
@@ -44,7 +45,8 @@ public:
   void update(float dt);
   void gesture(const Gesture &g, TilePos picked = {-1, -1});
   void walkTo(TilePos p);
-  void act(TilePos p, Tool requested);
+  void act(TilePos p, Tool requested, int seed = -1);
+  void rest();
   void notify(const char *format, ...);
   void message(const char *text, float duration = 3) {
     notice = text;

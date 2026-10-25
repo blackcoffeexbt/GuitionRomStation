@@ -40,6 +40,7 @@ bool Game::route(TilePos p) {
 }
 void Game::walkTo(TilePos p) {
   actionPending = false;
+  exitRequested = false;
   resting = false;
   if (!inBounds(p)) {
     message("The wilds end here");
@@ -55,7 +56,8 @@ void Game::walkTo(TilePos p) {
   player.hasPending = false;
   route(p);
 }
-void Game::act(TilePos p, Tool requested) {
+void Game::act(TilePos p, Tool requested, int seed) {
+  actionSeed = seed < 0 ? selectedSeed : uint8_t(seed);
   if (!inBounds(p)) {
     message("The wilds end here");
     return;
@@ -125,7 +127,7 @@ void Game::perform() {
         int qty = 2;
         switch (o.kind) {
         case ObjectKind::WildSeeds:
-          item = Item(selectedSeed);
+          item = Item(actionSeed);
           qty = 3;
           break;
         case ObjectKind::LooseWood:
@@ -144,6 +146,12 @@ void Game::perform() {
           break;
         default:
           break;
+        }
+        Item bonus = item == Item::Berry ? Item::BerrySeed : Item::FlowerSeed;
+        bool extra = item == Item::Flower || item == Item::Berry;
+        if (extra && inventory.counts[int(bonus)] == MaxStack) {
+          message("Your seed pouch is full");
+          return;
         }
         if (!inventory.add(item, qty)) {
           message("Your bag is full");
@@ -201,18 +209,27 @@ void Game::perform() {
     message("Cultivate the ground with your hoe first");
     return;
   }
-  if (!inventory.counts[selectedSeed]) {
+  if (!inventory.counts[actionSeed]) {
     message("No seeds of that kind. Gather a seed pouch.");
     return;
   }
-  if (plants.plant(actionTile, selectedSeed) < 0) {
+  if (plants.plant(actionTile, actionSeed) < 0) {
     message("Your garden is full for now");
     return;
   }
-  inventory.take(Item(selectedSeed));
+  inventory.take(Item(actionSeed));
   changed();
-  notify("Planted %s. Water helps it grow.", PlantDefs[selectedSeed].name);
+  notify("Planted %s. Water helps it grow.", PlantDefs[actionSeed].name);
   sound = SoundEvent::Harvest;
+}
+void Game::rest() {
+  actionPending = false;
+  player.path.count = player.next = 0;
+  player.hasPending = false;
+  player.position = {float(player.settled.x), float(player.settled.y)};
+  resting = true;
+  exitRequested = false;
+  message("Garden saved. You can switch off safely.", 30);
 }
 void Game::resources() {
   for (int i = 0; i < world.objectCount; i++) {
@@ -248,7 +265,7 @@ void Game::update(float dt) {
     auto p = player.pending;
     player.hasPending = false;
     if (actionPending)
-      act(p, actionTool);
+      act(p, actionTool, actionSeed);
     else
       route(p);
   } else if (moving && !player.moving()) {
@@ -280,6 +297,7 @@ void Game::gesture(const Gesture &g, TilePos picked) {
       int col = int(g.point.x - 32) / 104, row = int(g.point.y - 78) / 72;
       selectedSeed = row * 4 + col;
       tool = Tool::Seeds;
+      changed();
       panel = Panel::None;
       notify("%s selected. Tap cultivated soil.", PlantDefs[selectedSeed].name);
       return;

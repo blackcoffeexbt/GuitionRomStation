@@ -71,6 +71,7 @@ bool SaveManager::begin(wilds::Game &g) {
   return true;
 }
 void SaveManager::request(wilds::Game &g, uint32_t now, bool exit) {
+  uint32_t encodeStart = micros();
   snapshot->capture(g);
   pendingRevision = g.revision;
   length = wilds::SaveCodec::encode(*snapshot, buffer, wilds::SaveCodec::Capacity, sequence + 1);
@@ -78,6 +79,8 @@ void SaveManager::request(wilds::Game &g, uint32_t now, bool exit) {
     g.saveStatus = "Save failed";
     return;
   }
+  Serial.printf("SAVE encode_us=%u bytes=%u revision=%u\n", micros() - encodeStart,
+                unsigned(length), pendingRevision);
   busy = true;
   exitAfterSave = exit;
   g.saveStatus = "Saving...";
@@ -149,12 +152,7 @@ void SaveManager::update(wilds::Game &g, uint32_t now) {
       retryNeeded = false;
       g.saveStatus = "Saved";
       if (exitAfterSave && g.exitRequested && g.revision == pendingRevision) {
-        g.player.path.count = g.player.next = 0;
-        g.player.hasPending = false;
-        g.player.position = {float(g.player.settled.x), float(g.player.settled.y)};
-        g.resting = true;
-        g.exitRequested = false;
-        g.message("Garden saved. You can switch off safely.", 30);
+        g.rest();
       }
     } else {
       g.saveStatus = "Save failed - retrying";
@@ -176,3 +174,92 @@ void SaveManager::update(wilds::Game &g, uint32_t now) {
     request(g, now, exiting);
   }
 }
+
+#ifdef WILDS_SAVE_TESTING
+bool SaveManager::testFault(int mode) {
+  if (!available || busy || currentSlot < 0) {
+    Serial.println("FAULT refused: save busy or absent");
+    return false;
+  }
+  const char *backup = "/wilds-test-backup.sav";
+  auto readFile = [&](const char *path) -> size_t {
+    auto f = LittleFS.open(path, "r");
+    size_t n = f ? f.size() : 0;
+    if (!f || n > wilds::SaveCodec::Capacity || f.read(buffer, n) != n)
+      n = 0;
+    f.close();
+    return n;
+  };
+  wilds::SaveInfo info;
+  if (mode == 1) {
+    if (LittleFS.exists(backup)) {
+      Serial.println("FAULT refused: restore the existing backup first");
+      return false;
+    }
+    size_t n = readFile(slots[currentSlot]);
+    if (!n || !wilds::SaveCodec::decode(buffer, n, *snapshot, info))
+      return false;
+    auto f = LittleFS.open(backup, "w");
+    bool ok = f && f.write(buffer, n) == n;
+    if (f) {
+      f.flush();
+      f.close();
+    }
+    if (!ok)
+      return false;
+    size_t check = readFile(backup);
+    if (check != n || !wilds::SaveCodec::decode(buffer, check, *snapshot, info))
+      return false;
+    f = LittleFS.open(slots[currentSlot], "r+");
+    if (!f)
+      return false;
+    f.seek(wilds::SaveCodec::HeaderSize + 2);
+    int value = f.read();
+    f.seek(wilds::SaveCodec::HeaderSize + 2);
+    ok = value >= 0 && f.write(uint8_t(value ^ 0x80)) == 1;
+    f.flush();
+    f.close();
+    Serial.printf("FAULT corrupt_latest slot=%d sequence=%u backup_valid=1 ok=%d\n", currentSlot,
+                  sequence, ok);
+    if (ok) {
+      delay(100);
+      ESP.restart();
+    }
+    return ok;
+  }
+  if (mode == 2) {
+    size_t n = readFile(slots[currentSlot]);
+    if (!n || !wilds::SaveCodec::decode(buffer, n, *snapshot, info))
+      return false;
+    auto f = LittleFS.open("/wilds.tmp", "w");
+    bool ok = f && f.write(buffer, n / 2) == n / 2;
+    if (f) {
+      f.flush();
+      f.close();
+    }
+    Serial.printf("FAULT interrupted_temp bytes=%u good_slot=%d sequence=%u ok=%d\n",
+                  unsigned(n / 2), currentSlot, sequence, ok);
+    if (ok) {
+      delay(100);
+      ESP.restart();
+    }
+    return ok;
+  }
+  if (mode == 3) {
+    size_t n = readFile(backup);
+    if (!n || !wilds::SaveCodec::decode(buffer, n, *snapshot, info))
+      return false;
+    // Restore to the slot opposite the fallback selected on boot.
+    int target = currentSlot == 0 ? 1 : 0;
+    if (LittleFS.exists(slots[target]) && !LittleFS.remove(slots[target]))
+      return false;
+    if (!LittleFS.rename(backup, slots[target]))
+      return false;
+    Serial.printf("FAULT restored_backup sequence=%u target=%d\n", info.sequence, target);
+    delay(100);
+    ESP.restart();
+    return true;
+  }
+  return false;
+}
+#endif

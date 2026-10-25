@@ -11,6 +11,8 @@ static void settle(Game &g) {
   assert(!g.hasAction());
 }
 int main() {
+  const uint8_t crcVector[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+  assert(SaveCodec::crc(crcVector, sizeof(crcVector)) == 0xcbf43926u);
   auto game = std::make_unique<Game>();
   auto &g = *game;
   g.begin();
@@ -130,6 +132,26 @@ int main() {
   g.update(5);
   assert(g.world.at(soil).object < 0);
   assert(!g.world.objects[pouch].active);
+  // Tool/seed changes while walking must not alter the already queued planting action.
+  g.selectedSeed = 1;
+  g.act({31, 35}, Tool::Seeds);
+  g.selectedSeed = 7;
+  settle(g);
+  assert(g.plants.entries[g.plants.at({31, 35})].type == 1);
+  g.walkTo({34, 34});
+  g.update(.1f);
+  g.selectedSeed = 2;
+  g.act({32, 35}, Tool::Seeds);
+  g.selectedSeed = 4;
+  settle(g);
+  assert(g.plants.entries[g.plants.at({32, 35})].type == 2);
+  // Rest cancels transient actions and resumes without an unexpected late interaction.
+  g.act({33, 35}, Tool::Seeds);
+  g.rest();
+  assert(!g.hasAction() && !g.player.moving());
+  double clock = g.clock;
+  g.update(10);
+  assert(g.clock == clock);
   std::puts("PASS farming loop, eight species, watering, harvest/regrow, overflow, save roundtrip, "
             "corruption, semantics, offline time, regeneration");
 }

@@ -34,3 +34,7 @@ Touch packets use the AXS read command and 12-bit coordinates. Invalid coordinat
 - [Board hardware notes transcribed from schematic/vendor demo](https://github.com/victorbvalle/esphome-ha-panel/blob/main/docs/en/hardware.md)
 
 Pin references are supporting evidence, not a substitute for the actual runtime results in PERFORMANCE.md. The physical screen is reviewed through the MacBook FaceTime camera using `imagesnap`, with explicit user authorization. The camera turns off after each snapshot.
+
+## Phase 2 persistence
+
+Phase 2 reuses the verified Phase 1 pins, display driver, touch rotation and speaker connection. SaveManager mounts the existing LittleFS partition without auto-formatting. A supplied `data/` image can provision a deliberately empty/new device with `pio run -e guition -t uploadfs`; it must not be uploaded over a farm to retain. Normal firmware uploads keep the partition intact. The SDMMC pins/card remain unused.

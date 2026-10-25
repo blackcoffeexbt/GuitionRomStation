@@ -6,9 +6,9 @@ Complete the movement/rendering acceptance gate before adding farming: verified 
 
 There is no combat, penalty, network dependency or countdown. The diagnostic walking tour is opt-in over serial and turns off on a real tap. Source, generated art and original PNGs are tracked separately. `cc2b67d` is the first buildable rollback point; later commits contain hardware performance work.
 
-## Phase 2: farming and persistence
+## Phase 2: farming and persistence — implemented
 
-Add Inventory, Plants and SaveManager as simulation modules using stable, data-driven item/plant definitions. Collect resources, cultivate, plant, advance growth using simulation seconds, harvest, debounce saves and validate recovery. Add meaningful host serialization tests with corrupt/truncated files and migration cases. Explicitly expose save status before offering exit. Test save → reboot → reload on device. No trusted RTC exists in Phase 1, so never assume real-world time progressed during power-off.
+Inventory, Plants and SaveCodec are portable simulation modules; SaveManager handles asynchronous filesystem writes. Gathering, cultivation, eight plant species, watering, growth, harvesting/regrowth and seed returns are present. Full-state versioned saves use checksummed dual slots, with host validation and on-device recovery tests. Save status and Save & rest are visible. No trusted RTC exists, so growth resumes from saved simulation time after power-off. See PHASE2.md and SAVES.md.
 
 ## Phase 3: editable settlement
 

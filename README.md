@@ -1,78 +1,90 @@
 # Little Wilds
 
-A peaceful miniature isometric meadow for the **Guition JC3248W535 / JC3248W535C**, ESP32-S3 N16R8, AXS15231B touchscreen. C++17, PlatformIO, Arduino, RGB565. Runs without Wi-Fi or internet.
+A peaceful isometric farming game for the **Guition JC3248W535 / JC3248W535C**, ESP32-S3 N16R8, AXS15231B 480 × 320 touchscreen. C++17, PlatformIO, Arduino, custom RGB565 renderer. Runs entirely offline; no LVGL, Wi-Fi or internet dependency.
 
-## Current milestone: Phase 1
+## Phase 2: a persistent little garden
 
-- 64 × 64 seeded world with a cottage, paths, garden beds, trees, rocks, flowers and stream.
-- 480 × 320 landscape software renderer with viewport culling, transparent shaded sprites, ground-contact depth sorting and four-direction walking animation.
-- Tap accessible ground to walk using A*. Tap an object to approach its accessible side and inspect it.
-- Drag the meadow to pan. **Find me** recentres and follows the player. **Guide** opens instructions; tap outside to close.
-- Built-in I²S speaker: quiet tap/arrival/unreachable tones; **Sound** toggles mute.
-- Fixed 60 Hz simulation, capped 30 FPS rendering, no per-frame dynamic allocations in game code.
-- PSRAM world state, fast internal drawing buffer, LittleFS partition and USB serial diagnostics.
+Explore a 64 × 64 world, gather natural supplies, cultivate soil, plant eight species, water, grow and harvest. Your farm automatically saves to internal flash and survives reboot. The inserted SD card is not modified.
 
-**Farming, inventory, building and persistent game saves are Phase 2/3 work, not present in this prototype.** The world resets at boot. LittleFS mounts but no game-save file is written. The inserted SD card is not modified.
+- **Hand:** tap resources to approach and gather; tap ripe plants to harvest. Tap the cottage to open Save & rest.
+- **Seeds:** choose grass, wildflowers, carrots, pumpkins, berry bushes, small trees, apple trees or oaks, then tap cultivated soil.
+- **Hoe:** tap clear grass or dirt to cultivate it.
+- **Water:** tap a plant for a minute of faster growth. Plants never wither.
+- **Bag:** see seeds, resources and produce. Tap outside a panel to close it.
+- **Drag** to pan; **Find me** resumes following the wanderer.
+- Tap the **save status** at the top for an immediate save, the title for instructions, or **Sound** to mute.
+
+Seeds return on harvest. Perennials regrow; annuals leave the soil ready for another seed. Wild resources return after five minutes of simulation time, if their ground is still free grass. There is no combat or penalty.
+
+Use the cottage's **Save & rest** before switching off: wait for the safe-to-switch-off message. Rest pauses simulation; tap to continue. Without an RTC, plants resume from their last saved game time after power-off; this build does not invent elapsed wall-clock time. Saves are debounced after changes, with a 30-second clock/growth checkpoint. Sudden power loss can lose progress since the last completed save.
+
+Buildings, fences and editable settlement structures remain Phase 3 work.
 
 ## Build and flash
 
-Install PlatformIO Core, then run from this folder:
+Install PlatformIO Core, then:
 
 ```sh
-pio run
+pio run -e guition
 pio device list
-pio run -t upload --upload-port /dev/cu.usbmodem101
+pio run -e guition -t upload --upload-port /dev/cu.usbmodem101
 pio device monitor --port /dev/cu.usbmodem101 --baud 115200
 ```
 
-The port can change after reboot. On this Mac, PlatformIO is also available as `/Users/mark/.platformio/penv/bin/pio`. First build downloads pinned packages; later builds work offline. If flashing cannot connect, hold **BOOT**, press/release **RST**, then release **BOOT** and retry. No SD filesystem upload is needed. Do not use `uploadfs` once game saves are introduced without preserving those saves.
+The port can change after reboot. On this Mac, PlatformIO is also at `/Users/mark/.platformio/penv/bin/pio`. First build downloads pinned packages; subsequent builds can run offline. If flashing cannot connect, hold BOOT, press/release RST, release BOOT and retry.
 
-## Controls and diagnostics
+**Normal firmware uploads retain saves.** Do not erase flash, upload a filesystem image (`uploadfs`), or change the partition layout if you want to retain the farm. A preformatted LittleFS partition from Phase 1 is present on the development board. A fresh unformatted device must have LittleFS provisioned deliberately: **only for an empty/new board**, run `pio run -e guition -t uploadfs` once using the supplied `data/` image, then restart. This overwrites the filesystem and must not be used to update a farm you want to keep. The game refuses to auto-format a filesystem that fails to mount.
 
-USB serial commands end with a newline:
-
-| Command | Action |
-| --- | --- |
-| `status` | Position, path, touch count, camera and world state |
-| `walk 35 34` | Route to a tile for hardware movement verification |
-| `tap 240 150` | Simulate a screen tap (does not prove physical touch) |
-| `demo` | Toggle a gentle seven-stop walk around the clearing |
-| `bench` | Compare full-frame and full-width strip display transfers |
-| `mute` | Toggle audio |
-| `reboot` | Restart the firmware |
-
-For a scripted USB check (requires `pyserial`), use `python3 scripts/device_check.py --tour --seconds 24`. On macOS, `scripts/capture_device.sh` takes one authorised webcam snapshot.
-
-Every three seconds `PERF` reports measured FPS, rendering/rotation/transfer times, free heap/PSRAM, visible tiles/sprites and tap count. Boot reports chip, flash, PSRAM, touch probe, filesystem mount and transfer benchmark. See [hardware](docs/HARDWARE.md) and [performance](docs/PERFORMANCE.md).
-
-## Host checks and preview
+## Validation and diagnostics
 
 ```sh
 ./scripts/test_host.sh
+python3 scripts/device_check.py --tour --seconds 24
+./scripts/capture_device.sh
 ```
 
-Uses a host C++17 compiler; tests projection round trips, tile picking, A* shortest paths against independent BFS, obstacles, retargeting, gesture thresholds and camera bounds. Writes `.build/preview.ppm` using the **same renderer and assets** as the ESP32 firmware. No hardware emulation is claimed.
+Host checks use a C++17 compiler. The test suite covers projection/picking, A* vs independent BFS, movement retargeting, gestures, clipping, the farming loop, all plant species, growth/watering, regrowth, inventory overflow, save round trips, checksums, truncation, invalid save data and trusted/untrusted offline time. The shared renderer writes `.build/preview.ppm` for host previews.
 
-## Artwork
+USB serial commands (newline terminated):
 
-Original placeholder PNGs live in `assets/source/`, generated RGB565 arrays in `assets/generated/`. The firmware reads sprites directly from flash. Game state and the benchmark buffer live in PSRAM; the drawing buffer prefers internal RAM for speed.
+| Command | Action |
+| --- | --- |
+| `status` / `farmstatus` | Position, clock, inventory, plants and save sequence/status |
+| `walk x y` | Walk to a world tile |
+| `tap x y` | Simulate a screen tap through UI and sprite hit testing |
+| `tool 0..3` | Hand / Seeds / Hoe / Water |
+| `seed 0..7` | Select a plant species |
+| `act x y` | Approach and use current tool on a world tile |
+| `save` | Request a complete save |
+| `rest` | Save and pause at a safe tile centre |
+| `demo` | Toggle the diagnostic walking tour |
+| `bench` | Benchmark full-frame vs full-width strip transfers |
+| `mute` / `reboot` | Toggle audio / restart firmware |
+
+Serial farming commands exercise the same simulation as touchscreen actions, but do not by themselves prove physical touchscreen response. `scripts/phase2_device_check.py` is a **one-time new-farm** check using starter resources; do not rerun it on a modified farm expecting identical results. It does not accelerate time.
+
+An optional `guition_validation` build includes guarded save fault injection, documented in [the save format](docs/SAVES.md). The final normal build excludes those commands. Actual hardware evidence and performance are in [PERFORMANCE.md](docs/PERFORMANCE.md).
+
+## Architecture and assets
+
+- `include/BoardConfig.h`: verified board pins and landscape mapping.
+- `src/hardware/`: Display, Touch, Audio and asynchronous LittleFS SaveManager.
+- `src/core/`: Game, World, Player, Pathfinding, Camera, Input, Inventory, Plants and portable SaveCodec.
+- `src/render/`: framebuffer Surface, Renderer, sprite picking and Assets.
+- `assets/source/`: original transparent PNG placeholders; `assets/generated/`: RGB565 arrays and glyph atlas.
+- `test/`: host movement, farming and save tests.
+- `docs/`: hardware, save format, phases and measurements.
+
+Game state, save snapshots and buffers live in PSRAM. A 307,200-byte drawing buffer prefers internal SRAM for speed and has a slower PSRAM fallback. Sprites stay in flash. Save encoding captures a consistent snapshot on the main thread; a worker writes and verifies it without touching live game state.
+
+To regenerate artwork:
 
 ```sh
 python3 -m pip install -r scripts/requirements.txt
-python3 scripts/make_placeholders.py  # optional: regenerate original placeholder PNGs
-python3 scripts/convert_assets.py     # regenerate firmware asset arrays from PNGs
+python3 scripts/make_placeholders.py
+python3 scripts/convert_assets.py
 ```
 
-The placeholder generator uses the included DejaVu Sans font and licence. Existing PNGs and generated headers are checked in, so building needs neither Python nor a font installation. The converter accepts any RGBA PNG and reserves magenta RGB565 `0xf81f` for transparency. Alpha below 128 becomes transparent; solid magenta is remapped. Sprite anchors use `(width/2,height-8)` as ground contact. Original source art is separate from embedded arrays.
+Generated assets and source PNGs are checked in, so firmware builds require neither Python nor fonts. DejaVu Sans and its licence are bundled. PNG alpha below 128 becomes transparent RGB565 colour key `0xf81f`; opaque collisions are remapped. Anchors share a ground-contact point at `(width/2,height-8)`.
 
-## Layout
-
-- `include/BoardConfig.h`: hardware pins and orientation.
-- `src/hardware/`: Display, Touch and Audio adapters.
-- `src/core/`: World, Game, Player, Pathfinding, Camera and Input; no Arduino dependencies.
-- `src/render/`: reusable Surface, Renderer and Assets.
-- `assets/`: source PNGs and generated RGB565 data.
-- `test/`: host simulation and rendering checks.
-- `docs/`: hardware, measurements, save-format plan and milestone scope.
-
-Next: implement data-driven inventory/plants and recoverable versioned world saves, without coupling simulation to the hardware renderer. See [save design](docs/SAVES.md).
+See [Phase 2 controls](docs/PHASE2.md), [hardware configuration](docs/HARDWARE.md), [save format](docs/SAVES.md) and [next milestones](docs/MILESTONES.md).
