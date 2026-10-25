@@ -1,192 +1,367 @@
 #include <Arduino.h>
-#include <LittleFS.h>
-#include <esp_heap_caps.h>
-#include <new>
-#include "core/Game.h"
-#include "render/Renderer.h"
-#include "hardware/Display.h"
+#include <Preferences.h>
+#include <esp_timer.h>
+#include <esp_system.h>
+#include "Emulator.h"
+#include "Controls.h"
+#include "Video.h"
+#include "hardware/Controller.h"
 #include "hardware/Touch.h"
 #include "hardware/Audio.h"
-#include "hardware/SaveManager.h"
-using namespace wilds;
-Display display;
+#include "hardware/RomStorage.h"
+sb::ControllerInput controller;
+sb::Input controls{};
+#ifdef SMSEMU_VALIDATION
+bool simulated = false;
+uint16_t simulatedButtons = 0;
+#endif
+void sampleInput() {
+  controller.update();
+  controls = controller.input;
+#ifdef SMSEMU_VALIDATION
+  if (simulated) {
+    controls = {};
+    controls.connected = !(simulatedButtons & 512);
+    controls.fresh = true;
+    controls.x = float(bool(simulatedButtons & 8)) - float(bool(simulatedButtons & 4));
+    controls.y = float(bool(simulatedButtons & 2)) - float(bool(simulatedButtons & 1));
+    controls.fire = simulatedButtons & 16;
+    controls.bomb = simulatedButtons & 32;
+    controls.nextWeapon = simulatedButtons & 64;
+    controls.menu = simulatedButtons & 128;
+    controls.previousWeapon = simulatedButtons & 256;
+    controls.sampledAt = millis();
+  }
+#endif
+}
+
 Touch touch;
 Audio audio;
-Input input;
-SaveManager saves;
-Game *game = nullptr;
-Renderer *renderer = nullptr;
-uint32_t lastFrame = 0, lastInput = 0, lastReport = 0, frames = 0, renderUs = 0;
-float accumulator = 0;
-bool demo = false;
-int demoStep = 0;
-uint32_t nextDemo = 0;
-char command[80];
-size_t commandLength = 0;
-void dispatch(const Gesture &gesture) {
-  TilePos picked{-1, -1};
-  if (gesture.kind == GestureKind::Tap && game->panel == Panel::None && gesture.point.y >= 40 &&
-      gesture.point.y < WorldBottom && (game->tool == Tool::Hand || game->tool == Tool::Water))
-    picked = renderer->pickInteraction(*game, gesture.point);
-  game->gesture(gesture, picked);
+port::Video video;
+port::Session session;
+Preferences settings;
+bool muted = false;
+uint32_t emulated = 0, emuUs = 0, audioErrors = 0, benchFrames = 0;
+uint32_t romFrames = 0, inputChanges = 0;
+uint8_t appliedInputs = 0, lastAppliedInput = 0;
+
+RomStorage storage;
+port::LibraryModel libraryModel;
+bool libraryOpen = true, timingChanged = false;
+char currentGame[port::LibraryNameBytes] = "No game loaded";
+uint8_t libraryButtons(const sb::Input &in) {
+  if (!in.connected)
+    return 0;
+  return (in.y < -.25f ? port::LibraryModel::Up : 0) |
+         (in.y > .25f ? port::LibraryModel::Down : 0) |
+         (in.x < -.25f ? port::LibraryModel::Left : 0) |
+         (in.x > .25f ? port::LibraryModel::Right : 0) |
+         (in.fire ? port::LibraryModel::Accept : 0) | (in.bomb ? port::LibraryModel::Back : 0) |
+         (in.nextWeapon ? port::LibraryModel::Refresh : 0);
 }
-void status() {
-  Serial.printf("STATE pos=(%.2f,%.2f) settled=(%d,%d) path=%d/%d taps=%u clock=%.2f plants=%d "
-                "revision=%u save_seq=%u save=%s resting=%d seed=%d tool=%d\n",
-                game->player.position.x, game->player.position.y, game->player.settled.x,
-                game->player.settled.y, game->player.next, game->player.path.count, game->taps,
-                game->clock, game->plants.count(), game->revision, saves.savedSequence(),
-                game->saveStatus, game->resting, game->selectedSeed, int(game->tool));
-  Serial.print("INVENTORY");
-  for (int i = 0; i < ItemCount; i++)
-    Serial.printf(" %d:%u", i, game->inventory.counts[i]);
-  Serial.println();
-  for (int i = 0; i < Plants::Capacity; i++) {
-    const auto &p = game->plants.entries[i];
-    if (p.active)
-      Serial.printf("PLANT tile=(%d,%d) type=%d age=%.3f water=%.3f stage=%d\n", p.tile.x, p.tile.y,
-                    p.type, p.age, p.water, game->plants.stage(i));
+void refreshLibrary(const char *message = nullptr, bool loading = false) {
+  libraryModel.count = storage.count();
+  if (libraryModel.selected >= libraryModel.count)
+    libraryModel.selected = 0;
+  port::LibraryView view;
+  storage.view(view, libraryModel, emu::hasGame());
+  if (message)
+    snprintf(view.message, sizeof(view.message), "%s", message);
+  view.loading = loading;
+  video.library(view);
+}
+void openLibrary() {
+  benchFrames = 0;
+  session.pause();
+  libraryOpen = true;
+  libraryModel.open(libraryButtons(controls));
+  refreshLibrary();
+  video.menu.fetch_or(9u);
+}
+void loadProgress(size_t done, size_t total) {
+  sampleInput();
+  static uint32_t audioAt = 0;
+  static int lastPercent = -1;
+  if (millis() - audioAt >= 16) {
+    audio.submit(emu::audio(0), emu::audio(1), emu::samples(), true);
+    audioAt = millis();
+  }
+  if (!total)
+    return;
+  int percent = int(done * 100 / total);
+  if (percent != lastPercent) {
+    char message[72];
+    snprintf(message, sizeof(message), "Loading %d%% - please wait", percent);
+    refreshLibrary(message, true);
+    lastPercent = percent;
   }
 }
-void serialCommands() {
+void scanLibrary() {
+  refreshLibrary("Scanning SD card...", true);
+  storage.scan(loadProgress);
+  libraryModel.selected = 0;
+  refreshLibrary();
+  timingChanged = true;
+}
+void loadSelected() {
+  if (!libraryModel.count)
+    return;
+  session.pause();
+  refreshLibrary("Loading game...", true);
+  size_t bytes = 0;
+  uint32_t start = millis();
+  auto *rom = storage.load(libraryModel.selected, bytes, loadProgress);
+  bool bios = !strncasecmp(storage.entry(libraryModel.selected).name, "[BIOS]", 6);
+  if (rom && emu::load(rom, bytes, bios)) {
+    snprintf(currentGame, sizeof(currentGame), "%s", storage.entry(libraryModel.selected).name);
+    libraryOpen = false;
+    romFrames = inputChanges = 0;
+    appliedInputs = lastAppliedInput = 0;
+    session.paused = !controls.connected;
+    session.blockA = controls.fire;
+    session.lastA = controls.fire;
+    session.armed = false;
+    Serial.printf("ROM loaded name=%s bytes=%u load_ms=%u\n", currentGame, unsigned(bytes),
+                  millis() - start);
+  } else {
+    if (rom)
+      free(rom);
+    refreshLibrary();
+  }
+  timingChanged = true;
+}
+void libraryAction(port::LibraryModel::Action action) {
+  if (action == port::LibraryModel::Action::Load)
+    loadSelected();
+  else if (action == port::LibraryModel::Action::Scan)
+    scanLibrary();
+  else if (action == port::LibraryModel::Action::Close && emu::hasGame()) {
+    libraryOpen = false;
+    session.pause();
+    session.blockA = true;
+  }
+}
+void status() {
+  Serial.printf(
+      "SMS STATE paused=%d connected=%d frames=%u mute=%d heap=%u psram=%u audio_errors=%u\n",
+      session.paused, session.connected, emulated, muted, ESP.getFreeHeap(), ESP.getFreePsram(),
+      audioErrors + audio.writeErrors());
+#ifdef SMSEMU_VALIDATION
+  Serial.printf("CONTROL simulated=%d actual_pad=%d mask=%u rom_frames=%u applied=%u changes=%u\n",
+                simulated, controller.input.connected, simulatedButtons, romFrames, appliedInputs,
+                inputChanges);
+#else
+  Serial.printf("CONTROL simulated=0 actual_pad=%d rom_frames=%u applied=%u changes=%u\n",
+                controller.input.connected, romFrames, appliedInputs, inputChanges);
+#endif
+  Serial.printf("LIBRARY open=%d count=%d game=%s message=%s\n", libraryOpen, storage.count(),
+                currentGame, storage.message());
+}
+void setup() {
+  Serial.begin(115200);
+  delay(800);
+  Serial.printf("Master System SD / hi631 SMSPlus reset_reason=%d\n", int(esp_reset_reason()));
+  controller.begin();
+  settings.begin("rtype-sms", false);
+  muted = settings.getBool("mute", false);
+  video.menu.store(9);
+  if (!audio.begin() || !video.begin()) {
+    Serial.println("FATAL hardware init");
+    while (true)
+      delay(1000);
+  }
+  emu::setPixels(video.pixels());
+  if (!emu::begin()) {
+    Serial.println("FATAL SMS init");
+    while (true)
+      delay(1000);
+  }
+  touch.begin();
+  refreshLibrary("Scanning SD card...", true);
+  storage.begin();
+  refreshLibrary();
+  status();
+}
+void loop() {
+  static int64_t deadline = esp_timer_get_time();
+  static uint32_t report = millis(), previousFrames = 0, previousPresented = 0, touchAt = 0;
+  static bool wasTouch = false, lastLibraryX = false;
+  static char command[32];
+  static int commandLength = 0;
+  sampleInput();
+  if (libraryOpen) {
+    auto quiet = controls;
+    quiet.fire = quiet.bomb = quiet.menu = quiet.nextWeapon = quiet.previousWeapon = false;
+    session.receive(quiet);
+    int before = libraryModel.selected;
+    auto action = libraryModel.update(libraryButtons(controls), millis());
+    if (before != libraryModel.selected)
+      refreshLibrary();
+    libraryAction(action);
+  } else {
+    session.receive(controls);
+    if (session.paused && controls.nextWeapon && !lastLibraryX)
+      openLibrary();
+  }
+  lastLibraryX = controls.nextWeapon;
+  if (millis() - touchAt >= (session.paused ? 20u : 80u)) {
+    touchAt = millis();
+    sb::Vec2 p;
+    bool down = touch.read(p);
+    if (down && !wasTouch) {
+      if (libraryOpen) {
+        if (p.y >= 278) {
+          if (p.x < 120) {
+            libraryModel.move(-port::LibraryRows);
+            refreshLibrary();
+          } else if (p.x < 240) {
+            libraryModel.move(port::LibraryRows);
+            refreshLibrary();
+          } else if (p.x < 360)
+            scanLibrary();
+          else
+            libraryAction(port::LibraryModel::Action::Close);
+        } else {
+          int entry = libraryModel.touchRow(int(p.y));
+          if (entry >= 0) {
+            libraryModel.selected = entry;
+            loadSelected();
+          }
+        }
+      } else if (!session.paused)
+        session.pause();
+      else if (p.y > 225) {
+        muted = !muted;
+        settings.putBool("mute", muted);
+      } else if (p.y > 190) {
+        if (p.x < 240)
+          session.resetRequested = true;
+        else
+          openLibrary();
+      } else
+        session.resume();
+    }
+    wasTouch = down;
+  }
   while (Serial.available()) {
     char c = Serial.read();
     if (c == '\r')
       continue;
     if (c == '\n') {
       command[commandLength] = 0;
-      int x, y;
-#ifdef WILDS_SAVE_TESTING
-      if (sscanf(command, "fault %d", &x) == 1) {
-        saves.testFault(x);
-        commandLength = 0;
-        continue;
+      if (!strcmp(command, "bench") && session.paused && !libraryOpen && emu::hasGame()) {
+        emu::reset();
+        benchFrames = 480;
+        Serial.printf("BENCH begin frames=480 input=none actual_controller=%d\n",
+                      session.connected);
+      }
+#ifdef SMSEMU_VALIDATION
+      else if (!strcmp(command, "sim off")) {
+        simulated = false;
+      } else if (!strncmp(command, "sim ", 4)) {
+        char *end = nullptr;
+        long mask = strtol(command + 4, &end, 10);
+        if (end != command + 4 && !*end && mask >= 0 && mask < 1024) {
+          simulated = true;
+          simulatedButtons = uint16_t(mask);
+        }
       }
 #endif
-      if (sscanf(command, "walk %d %d", &x, &y) == 2) {
-        demo = false;
-        game->walkTo({int16_t(x), int16_t(y)});
+      else if (!strcmp(command, "status"))
         status();
-      } else if (sscanf(command, "tap %d %d", &x, &y) == 2) {
-        dispatch({GestureKind::Tap, {float(x), float(y)}, {}});
-        status();
-      } else if (sscanf(command, "act %d %d", &x, &y) == 2) {
-        demo = false;
-        game->act({int16_t(x), int16_t(y)}, game->tool);
-        status();
-      } else if (sscanf(command, "tool %d", &x) == 1 && x >= 0 && x < 4) {
-        game->tool = Tool(x);
-        game->panel = Panel::None;
-      } else if (sscanf(command, "seed %d", &x) == 1 && x >= 0 && x < SeedCount) {
-        game->selectedSeed = x;
-      } else if (!strcmp(command, "save")) {
-        game->saveRequested = true;
-      } else if (!strcmp(command, "rest")) {
-        game->saveRequested = true;
-        game->exitRequested = true;
-      } else if (!strcmp(command, "farmstatus")) {
-        status();
-      } else if (!strcmp(command, "demo")) {
-        demo = !demo;
-        nextDemo = millis();
-        Serial.printf("DEMO %d\n", demo);
-      } else if (!strcmp(command, "status"))
-        status();
-      else if (!strcmp(command, "bench"))
-        display.benchmark();
-      else if (!strcmp(command, "reboot"))
-        ESP.restart();
+      else if (!strcmp(command, "pair"))
+        controller.pair(true);
+      else if (!strcmp(command, "pause"))
+        session.pause();
+      else if (!strcmp(command, "library"))
+        openLibrary();
+      else if (!strcmp(command, "rescan")) {
+        openLibrary();
+        scanLibrary();
+      } else if (!strncmp(command, "load ", 5) && libraryOpen) {
+        char *end = nullptr;
+        long index = strtol(command + 5, &end, 10);
+        if (end != command + 5 && !*end && index >= 0 && index < storage.count()) {
+          libraryModel.selected = index;
+          loadSelected();
+        }
+      } else if (!strcmp(command, "resume") && !libraryOpen)
+        session.resume();
+      else if (!strcmp(command, "reset"))
+        session.resetRequested = true;
       else if (!strcmp(command, "mute")) {
-        game->muted = !game->muted;
-        game->markChanged();
-        Serial.printf("MUTE %d\n", game->muted);
-      } else
-        Serial.println("COMMANDS: status | walk x y | tap x y | act x y | tool 0..3 | seed 0..7 | "
-                       "save | rest | demo | bench | mute | reboot");
+        muted = !muted;
+        settings.putBool("mute", muted);
+      }
       commandLength = 0;
-    } else if (commandLength < sizeof(command) - 1)
+    } else if (commandLength < 31)
       command[commandLength++] = c;
   }
-}
-void setup() {
-  Serial.begin(115200);
-  delay(800);
-  Serial.printf("\nLITTLE WILDS / Phase 2 / %s %s\n", __DATE__, __TIME__);
-  Serial.printf("HARDWARE chip=%s rev=%d cpu=%u flash=%u psram=%u\n", ESP.getChipModel(),
-                ESP.getChipRevision(), ESP.getCpuFreqMHz(), ESP.getFlashChipSize(),
-                ESP.getPsramSize());
-  auto *gm = heap_caps_malloc(sizeof(Game), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  auto *rm = heap_caps_malloc(sizeof(Renderer), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!gm || !rm || !display.begin()) {
-    Serial.println("FATAL startup failed");
-    for (;;)
-      delay(1000);
+  if (session.resetRequested) {
+    if (emu::hasGame())
+      emu::reset();
+    session.resetRequested = false;
+    session.paused = true;
   }
-  game = new (gm) Game();
-  renderer = new (rm) Renderer();
-  game->begin();
-  touch.begin();
-  Serial.printf("AUDIO I2S ready=%d BCLK=42 LRCLK=2 DATA=41\n", audio.begin());
-  saves.begin(*game);
-  display.benchmark();
-  Surface surface(display.framebuffer());
-  renderer->draw(surface, *game);
-  display.present();
-  audio.play(SoundEvent::Arrive, false);
-  lastFrame = lastReport = millis();
-  status();
-}
-void loop() {
-  uint32_t now = millis();
-  serialCommands();
-  if (now - lastInput >= 8) {
-    lastInput = now;
-    Vec2 point;
-    bool down = touch.read(point);
-    auto gesture = input.sample(down, point, now);
-    if (gesture.kind != GestureKind::None) {
-      if (gesture.kind == GestureKind::Tap) {
-        demo = false;
-        Serial.printf("GESTURE tap=(%.0f,%.0f)\n", gesture.point.x, gesture.point.y);
+  video.menu.store((session.paused && !benchFrames ? 1u : 0u) | (session.connected ? 2u : 0u) |
+                   (muted ? 4u : 0u) | (libraryOpen ? 8u : 0u));
+  int64_t now = esp_timer_get_time();
+  if (timingChanged) {
+    deadline = now;
+    timingChanged = false;
+  }
+  if (now >= deadline) {
+    bool benchmark = benchFrames > 0;
+    if (benchmark || (!libraryOpen && emu::hasGame() && !session.paused && session.connected)) {
+      // Re-poll after any touch/settings work, immediately before applying input.
+      sampleInput();
+      session.receive(controls);
+      if (session.paused && !benchmark) {
+        delay(1);
+        return;
       }
-      dispatch(gesture);
+      bool draw = true;
+      uint32_t start = micros();
+      uint8_t nativeInput = benchmark ? 0 : port::buttons(controls, emulated, session.blockA);
+      if (nativeInput != lastAppliedInput)
+        ++inputChanges;
+      lastAppliedInput = nativeInput;
+      appliedInputs |= nativeInput;
+      ++romFrames;
+      emu::run(draw, nativeInput);
+      emuUs = micros() - start;
+      if (draw) {
+        video.publish(emulated + 1);
+        emu::setPixels(video.pixels());
+      }
+      ++emulated;
+      if (benchmark && --benchFrames == 0) {
+        session.pause();
+        Serial.println("BENCH complete; emulator paused");
+      }
     }
+    if (!audio.submit(emu::audio(0), emu::audio(1), emu::samples(),
+                      muted || (session.paused && !benchmark)))
+      ++audioErrors;
+    deadline += 16667;
+    if (now - deadline > 66668)
+      deadline = now + 16667;
   }
-  if (demo && int32_t(now - nextDemo) >= 0) {
-    constexpr TilePos tour[] = {{35, 34}, {36, 35}, {34, 37}, {32, 34},
-                                {30, 34}, {33, 33}, {34, 34}};
-    game->walkTo(tour[demoStep++ % 7]);
-    nextDemo = now + 3500;
+  if (millis() - report >= 3000) {
+    uint32_t elapsed = millis() - report, shown = video.presented.load();
+    Serial.printf("SMS PERF emu_fps=%.1f display_fps=%.1f emu_us=%u scale_us=%u transfer_us=%u "
+                  "heap=%u psram=%u pad=%d packets=%u paused=%d audio_errors=%u frames=%u "
+                  "pollgap_us=%u frame_age_us=%u\n",
+                  (emulated - previousFrames) * 1000.f / elapsed,
+                  (shown - previousPresented) * 1000.f / elapsed, emuUs, video.scaleUs.load(),
+                  video.transferUs.load(), ESP.getFreeHeap(), ESP.getFreePsram(),
+                  controller.input.connected, controller.packets, session.paused,
+                  audioErrors + audio.writeErrors(), emulated, controller.maxPollGap,
+                  video.frameAgeUs.load());
+    controller.maxPollGap = 0;
+    previousFrames = emulated;
+    previousPresented = shown;
+    report = millis();
   }
-  if (now - lastFrame < 33) {
-    delay(1);
-    return;
-  }
-  float dt = std::min(.15f, float(now - lastFrame) / 1000.f);
-  lastFrame = now;
-  accumulator += dt;
-  while (accumulator >= 1.f / 60.f) {
-    game->update(1.f / 60.f);
-    accumulator -= 1.f / 60.f;
-  }
-  saves.update(*game, millis());
-  audio.play(game->sound, game->muted);
-  game->sound = SoundEvent::None;
-  auto start = micros();
-  Surface surface(display.framebuffer());
-  renderer->draw(surface, *game);
-  renderUs = micros() - start;
-  display.present();
-  ++frames;
-  if (now - lastReport >= 3000) {
-    float fps = frames * 1000.f / (now - lastReport);
-    renderer->fps = fps;
-    Serial.printf("PERF fps=%.1f render_us=%u rotate_us=%u transfer_us=%u heap=%u psram=%u "
-                  "sprites=%d tiles=%d taps=%u\n",
-                  fps, renderUs, display.rotationUs, display.transferUs, ESP.getFreeHeap(),
-                  ESP.getFreePsram(), renderer->renderedSprites, renderer->renderedTiles,
-                  game->taps);
-    frames = 0;
-    lastReport = now;
-  }
+  delay(1);
 }

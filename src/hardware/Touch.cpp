@@ -10,7 +10,7 @@ bool Touch::begin() {
   Serial.printf("TOUCH addr=0x3b found=%d rotation=%d\n", ready, board::TouchRotation);
   return ready;
 }
-bool Touch::read(wilds::Vec2 &p) {
+bool Touch::read(sb::Vec2 &p) {
   if (!ready)
     return false;
   constexpr uint8_t request[11] = {0xb5, 0xab, 0xa5, 0x5a, 0, 0, 0, 8, 0, 0, 0};

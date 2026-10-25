@@ -8,4 +8,6 @@ Local core changes: `shared.h` uses standard allocation declarations and an expl
 
 The Guition board configuration, AXS15231B transfer/orientation, touchscreen, font and Bluepad32 adapter derive from this repository's existing Little Wilds/Starbreak hardware work. New platform glue supplies synchronized triple buffering, tiled scaling, I²S PCM output and pause/reconnect controls.
 
-The game ROM is supplied locally by the user. No R-Type ROM, source assets, screenshots, embedded firmware binary containing the ROM, or cartridge data is committed to Git. Runtime build/output directories and both `type-r/` and `rtype/roms/` are ignored.
+The game ROM is supplied locally by the user. No R-Type ROM, source assets, screenshots, embedded firmware binary containing the ROM, or cartridge data is committed to Git. Runtime build/output directories and both `type-r/` and `roms/` are ignored.
+
+The generated menu font in `assets/Font.h` derives from DejaVu Sans. Its notice is retained in `assets/LICENSE-DejaVu.txt`.

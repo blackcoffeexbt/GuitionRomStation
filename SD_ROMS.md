@@ -45,7 +45,7 @@ Save states and persistent cartridge SRAM are not implemented. Games which depen
 
 ## Hardware configuration and verification
 
-The SD interface is configured as native 1-bit SDMMC: CLK GPIO12, CMD GPIO11 and D0 GPIO13. GPIO10/DAT3 is pulled high. The mapping follows the repository’s existing [hardware notes](../docs/HARDWARE.md); the driver calls `setPins` explicitly instead of using ESP32-S3 defaults. These pins do not overlap the verified LCD, touch or speaker pins. The mount uses `format_if_mount_failed=false`.
+The SD interface is configured as native 1-bit SDMMC: CLK GPIO12, CMD GPIO11 and D0 GPIO13. GPIO10/DAT3 is pulled high. The mapping follows the repository’s existing [hardware notes](docs/HARDWARE.md); the driver calls `setPins` explicitly instead of using ESP32-S3 defaults. These pins do not overlap the verified LCD, touch or speaker pins. The mount uses `format_if_mount_failed=false`.
 
 Host tests exercise the same reader used by the SD adapter: valid images, copier headers, 8 KB mirroring, invalid sizes/console headers, allocation failure, interrupted reads, recovery and repeated cartridge adoption. Browser tests cover paging, held navigation and selection edge handling. The firmware builds without an embedded game ROM. Physical mounting, the three-entry browser and gameplay in all three games are webcam-verified. Validation-only simulated controller reports passed movement, buttons, pause and reconnect guards without resets or audio-write errors. BIOS slot/vector fixtures also pass. The normal Xbox firmware is restored. Physical-radio responsiveness and complete-game compatibility still require user feedback.
 

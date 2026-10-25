@@ -1,10 +1,12 @@
+.deps/
 .pio/
 .pio-core/
 .build/
 .DS_Store
 __pycache__/
-device-review/*.jpg
-device-review/*.bin
-device-review/*.log
-
-/type-r/
+device-review/
+roms/
+type-r/
+*.sms
+*.SMS
+*.gg

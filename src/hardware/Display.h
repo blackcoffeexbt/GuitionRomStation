@@ -1,16 +1,26 @@
 #pragma once
 #include <Arduino_GFX_Library.h>
+
+namespace sb {
+constexpr uint8_t color(uint32_t c) {
+  return uint8_t(((c >> 16) & 0xe0) | ((c >> 11) & 0x1c) | ((c >> 6) & 3));
+}
 class Display {
   Arduino_ESP32QSPI *bus = nullptr;
   Arduino_AXS15231B *panel = nullptr;
-  uint16_t *logical = nullptr;
-  uint16_t *physical = nullptr;
+  uint8_t *pixels = nullptr;
+  uint8_t *sourceCache = nullptr;
+  uint16_t palette[256]{};
 
 public:
+  uint32_t transferUs = 0;
+  bool internal = false;
   bool begin();
-  uint16_t *framebuffer() { return logical; }
-  uint32_t transferUs = 0, rotationUs = 0;
-  // Consumes framebuffer contents; the next frame must redraw every pixel.
   void present();
-  void benchmark();
+  void clear(uint8_t c);
+  void pixel(int x, int y, uint8_t c);
+  void rect(int x, int y, int w, int h, uint8_t c);
+  void text(int x, int y, const char *str, uint8_t c, int scale = 1);
+  void frame(const uint8_t *data, const uint16_t *colors);
 };
+} // namespace sb
