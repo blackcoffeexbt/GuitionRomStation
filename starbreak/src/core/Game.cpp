@@ -83,7 +83,9 @@ void Game::start() {
   bombs = 1;
   power = 1;
   score = 0;
-  stageTime = 0;
+  stageTime = levelTime = transition = 0;
+  level = rank = 1;
+  experience = bossesDefeated = 0;
   invulnerable = 2;
   fireTimer = 0;
   waveTimer = 2;
@@ -173,6 +175,60 @@ void Game::grantUpgrade() {
     cue(Cue::Pickup);
   }
 }
+void Game::addExperience(int amount) {
+  experience += amount;
+  if (rank < 4 && experience >= rank * 1400) {
+    experience -= rank * 1400;
+    ++rank;
+    message(rank == 2   ? "PILOT II - RAPID FIRE"
+            : rank == 3 ? "PILOT III - ENGINE BOOST"
+                        : "PILOT IV - ACE CANNON",
+            4);
+    cue(Cue::Pickup);
+  }
+}
+const char *Game::levelName() const {
+  return level == 1 ? "01  OUTER BELT" : level == 2 ? "02  CRYSTAL CANYON" : "03  IRON CITADEL";
+}
+const char *Game::bossName() const {
+  return level == 1 ? "WARDEN" : level == 2 ? "HIVE CARRIER" : "DREADNAUGHT";
+}
+float Game::terrainTop(float x) const {
+  if (level == 1 || levelTime > 70 || transition > 0)
+    return 34;
+  float phase = (x + levelTime * 48) / 105;
+  return level == 2 ? 49 + 15 * (1 + std::sin(phase))
+                    : 52 + 18 * (int((x + levelTime * 48) / 80) % 3 == 0);
+}
+float Game::terrainBottom(float x) const {
+  if (level == 1 || levelTime > 70 || transition > 0)
+    return 278;
+  float phase = (x + levelTime * 48) / 113;
+  return level == 2 ? 263 - 15 * (1 + std::sin(phase + 1.8f))
+                    : 261 - 18 * (int((x + levelTime * 48) / 96) % 3 == 1);
+}
+void Game::clearLevel() {
+  ++bossesDefeated;
+  score += 2000 * level;
+  addExperience(900);
+  boss.active = false;
+  particles(boss.pos, 50, 1);
+  for (auto &e : enemies)
+    e.active = false;
+  for (auto &b : enemyShots)
+    b.active = false;
+  for (auto &b : shots)
+    b.active = false;
+  if (level == LevelCount) {
+    finish(true);
+    return;
+  }
+  transition = 4;
+  invulnerable = 6;
+  shields = std::min(3, shields + 1);
+  message("SECTOR CLEAR - SHIELD REPAIRED", 4);
+  cue(Cue::Explosion);
+}
 void Game::spawn(EnemyKind kind, float x, float y, float phase) {
   for (auto &e : enemies)
     if (!e.active) {
@@ -183,20 +239,27 @@ void Game::spawn(EnemyKind kind, float x, float y, float phase) {
       e.baseY = y;
       e.phase = phase;
       e.shotTimer = kind == EnemyKind::Gunship ? 1.6f : 2.8f + phase * .1f;
-      e.hp = kind == EnemyKind::Scout     ? 2
-             : kind == EnemyKind::Fighter ? 4
-             : kind == EnemyKind::Gunship ? 14
-                                          : 9;
+      e.hp = kind == EnemyKind::Scout         ? 2
+             : kind == EnemyKind::Fighter     ? 4
+             : kind == EnemyKind::Gunship     ? 14
+             : kind == EnemyKind::Interceptor ? 3
+             : kind == EnemyKind::Mine        ? 5
+             : kind == EnemyKind::Turret      ? 12
+                                              : 9;
       return;
     }
 }
 Box Game::enemyBox(const Enemy &e) const {
-  float w = e.kind == EnemyKind::Gunship    ? 17
-            : e.kind == EnemyKind::Asteroid ? 11
-            : e.kind == EnemyKind::Fighter  ? 11
-                                            : 8;
+  float w = e.kind == EnemyKind::Gunship       ? 17
+            : e.kind == EnemyKind::Asteroid    ? 11
+            : e.kind == EnemyKind::Turret      ? 13
+            : e.kind == EnemyKind::Interceptor ? 10
+            : e.kind == EnemyKind::Fighter     ? 11
+                                               : 8;
   float h = e.kind == EnemyKind::Gunship    ? 12
             : e.kind == EnemyKind::Asteroid ? 10
+            : e.kind == EnemyKind::Turret   ? 11
+            : e.kind == EnemyKind::Mine     ? 8
             : e.kind == EnemyKind::Fighter  ? 7
                                             : 6;
   return {e.pos.x, e.pos.y, w, h};
@@ -230,11 +293,16 @@ void Game::particles(Vec2 p, int count, uint8_t color) {
 }
 void Game::kill(Enemy &e, bool addScore) {
   e.active = false;
-  if (addScore)
-    score += e.kind == EnemyKind::Scout     ? 100
-             : e.kind == EnemyKind::Fighter ? 180
-             : e.kind == EnemyKind::Gunship ? 450
-                                            : 75;
+  if (addScore) {
+    uint32_t before = score;
+    score += e.kind == EnemyKind::Scout         ? 100
+             : e.kind == EnemyKind::Fighter     ? 180
+             : e.kind == EnemyKind::Gunship     ? 450
+             : e.kind == EnemyKind::Interceptor ? 220
+             : e.kind == EnemyKind::Turret      ? 350
+                                                : 75;
+    addExperience(int(score - before));
+  }
   particles(e.pos, e.kind == EnemyKind::Gunship ? 12 : 6, 1);
   cue(Cue::Explosion);
 }
@@ -280,7 +348,7 @@ void Game::bomb() {
       kill(e);
   if (boss.active) {
     boss.hp = std::max(0, boss.hp - 220);
-    if (boss.hp <= 750)
+    if (boss.hp <= boss.maxHp / 2)
       boss.phase = 2;
   }
   invulnerable = std::max(invulnerable, .8f);
@@ -302,38 +370,40 @@ void Game::finish(bool won) {
   cue(Cue::Explosion);
 }
 void Game::spawnWave() {
-  float t = stageTime;
-  if (t < 42) {
-    int n = t < 16 ? 2 : 4;
-    float y = 85 + (waveIndex * 47) % 155;
-    for (int i = 0; i < n; i++)
-      spawn(EnemyKind::Scout, 500 + i * 31, y + (i % 2) * 20, float(i));
-    waveTimer = t < 16 ? 8 : 6.5f;
-  } else if (t < 105) {
-    int n = t < 65 ? 2 : 3;
-    for (int i = 0; i < n; i++)
-      spawn(EnemyKind::Fighter, 502 + i * 42, 90 + (waveIndex * 31 + i * 66) % 145,
-            float(i + waveIndex));
+  float t = levelTime;
+  float y = 104 + (waveIndex * 41) % 112;
+  if (level == 1) {
+    if (t < 22) {
+      for (int i = 0; i < 3; i++)
+        spawn(EnemyKind::Scout, 500 + i * 32, y + (i % 2) * 18, float(i));
+      waveTimer = 6;
+    } else if (t < 48) {
+      for (int i = 0; i < 3; i++)
+        spawn(EnemyKind::Fighter, 502 + i * 42, 100 + (waveIndex * 31 + i * 43) % 120,
+              float(i + waveIndex));
+      waveTimer = 7;
+    } else {
+      spawn(EnemyKind::Gunship, 518, y);
+      for (int i = 0; i < 3; i++)
+        spawn(EnemyKind::Asteroid, 520 + i * 48, 100 + (waveIndex * 23 + i * 51) % 120, float(i));
+      waveTimer = 7;
+    }
+  } else if (level == 2) {
+    for (int i = 0; i < 3; i++)
+      spawn(i == 1 ? EnemyKind::Mine : EnemyKind::Interceptor, 510 + i * 53,
+            103 + (waveIndex * 29 + i * 47) % 110, float(i + waveIndex));
+    if (t > 28)
+      spawn(EnemyKind::Gunship, 570, y);
     waveTimer = 7;
-  } else if (t < 165) {
-    spawn(EnemyKind::Gunship, 518, 90 + (waveIndex * 63) % 140, float(waveIndex));
+  } else {
+    spawn(EnemyKind::Turret, 510, waveIndex % 2 ? 94 : 221);
     for (int i = 0; i < 3; i++)
-      spawn(EnemyKind::Scout, 500 + i * 35, 70 + (waveIndex * 43 + i * 41) % 180, float(i));
-    waveTimer = 8;
-  } else if (t < 215) {
-    for (int i = 0; i < 4; i++)
-      spawn(EnemyKind::Asteroid, 500 + i * 46, 64 + (waveIndex * 53 + i * 61) % 195,
-            float(i + waveIndex));
-    if (waveIndex % 2)
-      spawn(EnemyKind::Fighter, 560, 150, float(waveIndex));
-    waveTimer = 5.5f;
-  } else if (t < 250) {
-    spawn(EnemyKind::Gunship, 520, 80 + (waveIndex * 71) % 160);
-    for (int i = 0; i < 3; i++)
-      spawn(EnemyKind::Fighter, 510 + i * 45, 78 + (waveIndex * 23 + i * 65) % 170, float(i));
-    waveTimer = 8;
-  } else
-    waveTimer = 999;
+      spawn(i == 1 ? EnemyKind::Fighter : EnemyKind::Interceptor, 550 + i * 37,
+            108 + (waveIndex * 31 + i * 39) % 105, float(i));
+    if (t > 35)
+      spawn(EnemyKind::Mine, 620, y);
+    waveTimer = 7;
+  }
   ++waveIndex;
 }
 void Game::updateEnemies(float dt) {
@@ -341,19 +411,35 @@ void Game::updateEnemies(float dt) {
     if (e.active) {
       e.previous = e.pos;
       e.age += dt;
-      float speed = e.kind == EnemyKind::Scout     ? 62
-                    : e.kind == EnemyKind::Fighter ? 76
-                    : e.kind == EnemyKind::Gunship ? 39
-                                                   : 69;
+      float speed = e.kind == EnemyKind::Scout         ? 62
+                    : e.kind == EnemyKind::Fighter     ? 76
+                    : e.kind == EnemyKind::Gunship     ? 39
+                    : e.kind == EnemyKind::Interceptor ? 112
+                    : e.kind == EnemyKind::Turret      ? 48
+                    : e.kind == EnemyKind::Mine        ? 52
+                                                       : 69;
       e.pos.x -= speed * dt;
       if (e.kind == EnemyKind::Fighter)
         e.pos.y = e.baseY + std::sin(e.age * 2.1f + e.phase) * 25;
       if (e.kind == EnemyKind::Asteroid)
         e.pos.y = e.baseY + std::sin(e.age * 1.2f + e.phase) * 8;
+      if (e.kind == EnemyKind::Interceptor)
+        e.pos.y = e.baseY + std::sin(e.age * 3.2f + e.phase) * 18;
+      if (e.kind == EnemyKind::Mine)
+        e.pos.y = e.baseY + std::sin(e.age * 1.8f) * 10;
       e.shotTimer -= dt;
       if (e.shotTimer <= 0 && e.pos.x < 452 && e.pos.x > player.x + 45 &&
           e.kind != EnemyKind::Asteroid) {
-        if (e.kind == EnemyKind::Gunship) {
+        if (e.kind == EnemyKind::Mine) {
+          for (int i = -1; i <= 1; ++i)
+            enemyShot(e.pos, {-74, float(i) * 48});
+          e.shotTimer = 4;
+        } else if (e.kind == EnemyKind::Turret) {
+          auto v = aim(e.pos, player, 94);
+          enemyShot(e.pos, v, 4);
+          enemyShot(e.pos, {v.x, v.y + 18}, 3);
+          e.shotTimer = 2.6f;
+        } else if (e.kind == EnemyKind::Gunship) {
           auto v = aim(e.pos, player, 86);
           enemyShot(e.pos, {v.x, v.y - 25}, 4);
           enemyShot(e.pos, v, 4);
@@ -382,19 +468,34 @@ void Game::updateBoss(float dt) {
   boss.age += dt;
   boss.pos.x = std::max(410.f, 520 - boss.age * 55);
   boss.pos.y = 160 + std::sin(boss.age * .62f) * 51;
-  if (boss.hp <= 750 && boss.phase == 1) {
+  if (boss.hp <= boss.maxHp / 2 && boss.phase == 1) {
     boss.phase = 2;
     boss.shotTimer = .8f;
     for (auto &b : enemyShots)
       b.active = false;
     particles(boss.pos, 24, 1);
-    message("DREADNAUGHT - CORE EXPOSED", 4);
+    message("BOSS ARMOUR BROKEN - PRESS THE ATTACK", 4);
+  }
+  if (boss.hp > 0 && overlaps(bossBox(), playerBox())) {
+    hitPlayer();
+    if (screen != Screen::Playing)
+      return;
   }
   boss.shotTimer -= dt;
   if (boss.age > 2.5f && boss.shotTimer <= 0) {
-    Vec2 muzzle{boss.pos.x - 42, boss.pos.y};
+    Vec2 muzzle{boss.pos.x - (level == 1 ? 35 : level == 2 ? 41 : 44), boss.pos.y};
     auto v = aim(muzzle, player, boss.phase == 1 ? 90 : 108);
-    if (boss.phase == 1) {
+    if (level == 1) {
+      for (int i = -1; i <= 1; i++)
+        enemyShot(muzzle, {v.x, v.y + i * (boss.phase == 1 ? 22.f : 34.f)}, 3);
+      boss.shotTimer = boss.phase == 1 ? 1.8f : 1.4f;
+    } else if (level == 2) {
+      for (int i = -2; i <= 2; i++)
+        enemyShot(muzzle, {-92, float(i) * 27}, 3);
+      if (boss.phase == 2)
+        spawn(EnemyKind::Interceptor, 470, boss.pos.y, boss.age);
+      boss.shotTimer = boss.phase == 1 ? 2.f : 1.65f;
+    } else if (boss.phase == 1) {
       for (int i = -1; i <= 1; i++)
         enemyShot({muzzle.x, muzzle.y + i * 19}, {v.x, v.y + i * 13}, 4);
       boss.shotTimer = 1.35f;
@@ -405,9 +506,7 @@ void Game::updateBoss(float dt) {
     }
   }
   if (boss.hp <= 0) {
-    boss.active = false;
-    particles(boss.pos, 50, 1);
-    finish(true);
+    clearLevel();
   }
 }
 void Game::updateShots(float dt) {
@@ -432,7 +531,8 @@ void Game::updateShots(float dt) {
         }
       if (b.active && boss.active && boss.age > 2 &&
           swept({b.previous.x - boss.previous.x, b.previous.y - boss.previous.y},
-                {b.pos.x - boss.pos.x, b.pos.y - boss.pos.y}, b.radius, {0, 0, 43, 42})) {
+                {b.pos.x - boss.pos.x, b.pos.y - boss.pos.y}, b.radius,
+                {0, 0, bossBox().halfW, bossBox().halfH})) {
         b.active = false;
         boss.hp -= b.damage;
         particles(b.pos, 2, 0);
@@ -465,21 +565,42 @@ void Game::update(float dt) {
   }
   ++totalTicks;
   stageTime += dt;
+  if (transition > 0) {
+    transition -= dt;
+    if (transition <= 0) {
+      transition = 0;
+      ++level;
+      levelTime = 0;
+      waveIndex = 0;
+      waveTimer = 2;
+      boss = {};
+      player = previousPlayer = {68, 160};
+      message(levelName(), 5);
+    }
+    return;
+  }
+  levelTime += dt;
   invulnerable = std::max(0.f, invulnerable - dt);
   bombFlash = std::max(0.f, bombFlash - dt);
   previousPlayer = player;
   auto move = normalizeMove(input.x, input.y);
-  player.x = std::clamp(player.x + move.x * 165 * dt, 22.f, 450.f);
-  player.y = std::clamp(player.y + move.y * 165 * dt, 57.f, 260.f);
+  player.x = std::clamp(player.x + move.x * (rank >= 3 ? 180 : 165) * dt, 22.f, 450.f);
+  player.y = std::clamp(player.y + move.y * (rank >= 3 ? 180 : 165) * dt, 57.f, 260.f);
+  if (player.y - 7 < terrainTop(player.x) || player.y + 7 > terrainBottom(player.x)) {
+    hitPlayer();
+    player.y = std::clamp(player.y, terrainTop(player.x) + 9, terrainBottom(player.x) - 9);
+    if (screen != Screen::Playing)
+      return;
+  }
   fireTimer -= dt;
   if (input.fire && fireTimer <= 0) {
     fire();
-    fireTimer = .135f;
+    fireTimer = rank == 4 ? .105f : rank >= 2 ? .12f : .135f;
   }
   waveTimer -= dt;
-  if (waveTimer <= 0 && stageTime < 250)
+  if (waveTimer <= 0 && levelTime < 70)
     spawnWave();
-  if (upgradeSpawned < 2 && stageTime > float(upgradeSpawned ? 153 : 68)) {
+  if (upgradeSpawned < 2 && stageTime > float(upgradeSpawned ? 55 : 22)) {
     for (auto &p : pickups)
       if (!p.active) {
         p = {true, {465, player.y}, 0};
@@ -505,17 +626,20 @@ void Game::update(float dt) {
       if (p.pos.x < -20)
         p.active = false;
     }
-  if (stageTime > 265 && !boss.active && boss.age == 0) {
+  if (levelTime > 80 && !boss.active && boss.age == 0) {
     boss.active = true;
+    boss.hp = boss.maxHp = level == 1 ? 480 : level == 2 ? 850 : 1500;
     boss.pos = boss.previous = {520, 160};
     for (auto &e : enemies)
       e.active = false;
     for (auto &b : enemyShots)
       b.active = false;
-    message("WARNING - DREADNAUGHT APPROACHING", 5);
+    message(level == 1   ? "WARNING - BELT WARDEN"
+            : level == 2 ? "WARNING - HIVE CARRIER"
+                         : "WARNING - DREADNAUGHT",
+            5);
   }
-  if (stageTime > 165 && stageTime - dt <= 165)
-    message("ASTEROID BELT - WATCH YOUR VECTOR", 5);
+
   updateEnemies(dt);
   if (screen != Screen::Playing)
     return;

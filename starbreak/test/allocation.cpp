@@ -22,7 +22,7 @@ int main() {
   g->connected = true;
   g->start();
   unsigned before = allocations;
-  while (g->screen == sb::Screen::Playing && g->stageTime < 400) {
+  while (g->screen == sb::Screen::Playing && g->stageTime < 650) {
     g->receive(sb::pilot(*g));
     g->update(1.f / 60);
   }

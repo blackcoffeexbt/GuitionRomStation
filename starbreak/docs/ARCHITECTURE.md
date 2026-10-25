@@ -10,17 +10,19 @@ Fixed capacities: 32 enemies, 96 player projectiles, 160 enemy projectiles, four
 
 Player and enemy shots use swept relative-motion segment/AABB tests. Their previous positions are compared with target previous positions, preventing tunnelling for both moving projectiles and moving targets. Damage grants 1.5 seconds of invulnerability and never removes cannon upgrades. Lethal contact terminates the simulation tick so later collisions cannot change an already-final result.
 
-## Authored stage
+## Three-sector campaign
 
-- 0–42 s: small scout formations; a gentle introduction.
-- 42–105 s: weaving fighters with aimed shots.
-- 105–165 s: armoured gunships and supporting scouts.
-- 165–215 s: drifting asteroid belt with occasional fighters.
-- 215–250 s: mixed final formations.
-- 250–265 s: transition and approach.
-- 265 s onward: dreadnaught, 1,500 HP; at 750 HP the exposed core changes attack pattern.
+Each sector has 70 seconds of deterministic formations, a ten-second clear approach and a two-phase boss. Sector clear freezes flight for four seconds, repairs one shield (maximum three), awards points and advances to the next sector. The final boss ends the campaign. Power, ranks, remaining bomb and score carry between sectors; retry resets the entire campaign.
 
-Power cells appear at approximately 68 and 153 seconds, moving through the playfield with short-range attraction. Cannon levels one/two/three produce single/twin/spread fire; taking damage preserves the level. The boss awards 5,000 points plus 750 per remaining shield. Timing depends on actual play; the validation pilot's completed stage is approximately five minutes, without advancing the clock artificially.
+- Outer Belt: teaching scout formations, weaving fighters, gunships and asteroids; Warden (480 HP) fires aimed fans.
+- Crystal Canyon: fast weaving interceptors, drifting mines and gunships; Hive Carrier (850 HP) fires a lane fan and launches interceptors in phase two.
+- Iron Citadel: turret batteries and mixed formations; Dreadnaught (1,500 HP) changes from aimed salvos to a five-shot spread.
+
+All bosses change phase at half health. Boss collision bounds match each sprite's dimensions. Power cells appear at 22 and 55 seconds of total flight. Three cannon levels provide single/twin/spread fire. Each boss awards 2,000 × sector points; final victory adds 5,000 plus 750 per remaining shield. Host pilot runs take approximately 315–325 seconds.
+
+Kills grant experience equal to their score value. Ranks two, three and four require 1,400, 2,800 and 4,200 additional XP, respectively. Rank two reduces firing interval from 135 to 120 ms; rank three raises movement speed from 165 to 180 pixels/second; rank four reduces firing interval to 105 ms. Cannon pickup levels remain independent.
+
+Canyon and citadel terrain uses deterministic scrolling upper/lower boundary functions shared by renderer and collision. The corridor remains at least 150 pixels high. Contact costs a shield through the normal cooldown and pushes the ship clear. Terrain retracts before bosses. The terrain scroll and sector transition freeze during disconnect/pause.
 
 ## Hardware
 

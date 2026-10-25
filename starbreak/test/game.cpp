@@ -56,6 +56,7 @@ int main() {
   g.boss.phase = 1;
   g.update(1.f / 60);
   assert(g.boss.phase == 2);
+  g.level = 3;
   g.boss.hp = 0;
   g.update(1.f / 60);
   assert(g.screen == Screen::Victory && g.best == g.score && g.wins == 1);
@@ -85,7 +86,7 @@ int main() {
   auto run = std::make_unique<Game>();
   run->connected = true;
   run->start();
-  while (run->screen == Screen::Playing && run->stageTime < 420) {
+  while (run->screen == Screen::Playing && run->stageTime < 650) {
     auto input = pilot(*run);
     run->receive(input);
     run->update(1.f / 60);

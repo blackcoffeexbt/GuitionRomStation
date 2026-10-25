@@ -31,10 +31,12 @@ int victories = 0, defeats = 0;
 #endif
 void status() {
   Serial.printf("STATE screen=%d t=%.2f pos=(%.2f,%.2f) shield=%d bomb=%d power=%d score=%u "
-                "best=%u boss=%d/%d connected=%d runs=%u wins=%u losses=%u mute=%d ticks=%u\n",
+                "best=%u boss=%d/%d connected=%d runs=%u wins=%u losses=%u mute=%d ticks=%u "
+                "level=%d level_time=%.2f rank=%d xp=%d cleared=%d\n",
                 int(game.screen), game.stageTime, game.player.x, game.player.y, game.shields,
                 game.bombs, game.power, game.score, game.best, game.boss.hp, game.boss.phase,
-                game.connected, game.runs, game.wins, game.losses, game.muted, game.totalTicks);
+                game.connected, game.runs, game.wins, game.losses, game.muted, game.totalTicks,
+                game.level, game.levelTime, game.rank, game.experience, game.bossesDefeated);
 }
 void serialCommands() {
   while (Serial.available()) {

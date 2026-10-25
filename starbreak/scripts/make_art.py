@@ -42,6 +42,30 @@ make('boss',(88,84),[
  ('rectangle',(27,26,56,58),'edge'),('rectangle',(32,31,51,53),'pink'),('rectangle',(37,36,46,48),'light'),
  ('rectangle',(62,24,77,60),'purple'),('rectangle',(69,29,81,36),'orange'),('rectangle',(69,48,81,55),'orange'),
  ('rectangle',(37,9,60,12),'light'),('rectangle',(37,69,60,72),'light')])
+make('interceptor',(22,16),[
+ ('polygon',[(0,8),(15,0),(21,1),(16,7),(21,14),(15,15)],'edge'),
+ ('polygon',[(2,8),(15,2),(18,2),(12,7),(18,13),(15,13)],'#72d8aa'),
+ ('rectangle',(5,7,13,8),'light')])
+make('mine',(18,18),[
+ ('rectangle',(7,0,10,17),'edge'),('rectangle',(0,7,17,10),'edge'),
+ ('polygon',[(4,3),(13,3),(16,8),(13,14),(4,14),(1,8)],'purple'),
+ ('rectangle',(6,6,11,11),'orange'),('rectangle',(8,7,9,9),'light')])
+make('turret',(28,24),[
+ ('rectangle',(7,1,27,22),'edge'),('rectangle',(9,3,25,20),'shade'),
+ ('rectangle',(4,7,21,16),'purple'),('rectangle',(0,9,14,13),'orange'),
+ ('rectangle',(12,4,22,6),'light'),('rectangle',(12,17,22,19),'light')])
+make('warden',(70,64),[
+ ('polygon',[(19,0),(57,3),(69,20),(68,46),(54,62),(18,63),(11,47),(0,32),(11,16)],'edge'),
+ ('polygon',[(22,3),(55,6),(65,21),(63,44),(52,58),(21,59),(15,45),(4,32),(15,19)],'#4d8b9d'),
+ ('rectangle',(18,8,52,17),'light'),('rectangle',(18,46,52,54),'light'),
+ ('rectangle',(9,25,54,38),'orange'),('rectangle',(24,21,45,42),'edge'),
+ ('rectangle',(29,25,40,38),'pink')])
+make('carrier',(82,70),[
+ ('polygon',[(18,0),(72,2),(81,15),(77,56),(65,69),(18,68),(5,52),(0,34),(5,16)],'edge'),
+ ('rectangle',(20,4,70,65),'#3c836e'),('rectangle',(8,18,74,52),'#72d8aa'),
+ ('rectangle',(14,23,61,46),'edge'),('rectangle',(22,27,55,42),'purple'),
+ ('rectangle',(25,6,59,11),'light'),('rectangle',(25,58,59,62),'light'),
+ ('rectangle',(5,29,19,39),'orange')])
 headers=['#pragma once','#include <cstdint>','namespace sb {','struct Sprite {const uint8_t* data; int w,h;};']
 source=['#include "Sprites.h"','namespace sb {']
 for p in sorted(OUT.glob('*.png')):

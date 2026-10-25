@@ -9,7 +9,7 @@ int main() {
     g->connected = true;
     g->start();
     double accumulator = 0;
-    while (g->screen == sb::Screen::Playing && g->stageTime < 420) {
+    while (g->screen == sb::Screen::Playing && g->stageTime < 650) {
       g->receive(sb::pilot(*g));
       accumulator += 1.0 / renderHz;
       while (accumulator >= 1.0 / 60) {

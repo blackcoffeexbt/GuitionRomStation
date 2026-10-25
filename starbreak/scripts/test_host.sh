@@ -14,3 +14,7 @@ c++ -std=c++17 -O2 -Wall -Wextra -Isrc src/core/Game.cpp test/allocation.cpp -o 
 .build/allocation-tests
 c++ -std=c++17 -O2 -Wall -Wextra -Itest/stubs -Isrc -Iassets/generated src/core/Game.cpp src/Renderer.cpp test/render.cpp -o .build/render-tests
 .build/render-tests
+c++ -std=c++17 -O2 -Wall -Wextra -Isrc src/core/Game.cpp test/sectors.cpp -o .build/sector-tests
+.build/sector-tests
+c++ -std=c++17 -O2 -Wall -Wextra -Isrc src/core/Game.cpp test/replay.cpp -o .build/replay-tests
+.build/replay-tests

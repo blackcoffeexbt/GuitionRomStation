@@ -12,7 +12,16 @@ void Renderer::button(Display &d, int y, const char *label, bool enabled) {
   d.text(112, y + 10, label, enabled ? White : Blue);
 }
 void Renderer::draw(Display &d, const Game &g) {
-  d.clear(color(0x050919));
+  d.clear(color(g.level == 2 ? 0x080d24 : g.level == 3 ? 0x120f20 : 0x050919));
+  // Distant planetary disk; dark enough to preserve hostile-shot contrast.
+  int planetX = 360 - int(g.visualTime * 2) % 580;
+  for (int y = -26; y <= 26; ++y) {
+    int width = int(std::sqrt(float(26 * 26 - y * y)));
+    d.rect(planetX - width, 108 + y, width * 2, 1,
+           color(g.level == 1   ? 0x183047
+                 : g.level == 2 ? 0x24354b
+                                : 0x342942));
+  }
   for (int i = 0; i < 110; i++) {
     float speed = 5 + (i % 3) * 18;
     int x = (int(i * 137 - g.visualTime * speed) % 480 + 480) % 480, y = 34 + (i * 71) % 244;
@@ -20,6 +29,28 @@ void Renderer::draw(Display &d, const Game &g) {
   }
   if (g.screen == Screen::Playing || g.screen == Screen::Pause || g.screen == Screen::GameOver ||
       g.screen == Screen::Victory) {
+    // Terrain is drawn from the same boundary functions used by collision.
+    if (g.level > 1 && g.transition <= 0) {
+      for (int x = 0; x < 480; x += 4) {
+        int top = int(g.terrainTop(x)), bottom = int(g.terrainBottom(x));
+        auto rock = color(g.level == 2 ? 0x19314d : 0x283044);
+        auto edge = color(g.level == 2 ? 0x397a8b : 0x7a5367);
+        d.rect(x, 34, 4, top - 34, rock);
+        d.rect(x, bottom, 4, 278 - bottom, rock);
+        if (top > 34)
+          d.rect(x, top - 3, 4, 3, edge);
+        if (bottom < 278)
+          d.rect(x, bottom, 4, 3, edge);
+      }
+      for (int i = 0; i < 9; i++) {
+        int x = (int(i * 71 - g.levelTime * 48) % 560 + 560) % 560 - 40;
+        if (g.levelTime <= 70) {
+          int y = int(g.terrainTop(x)) - 12;
+          d.rect(x, y, 7, 7, color(g.level == 2 ? 0x65a8bd : 0xb38271));
+          d.rect(x + 2, y - 3, 3, 3, Cyan);
+        }
+      }
+    }
     for (auto &p : g.pickups)
       if (p.active) {
         int x = int(p.pos.x), y = int(p.pos.y + std::sin(p.age * 4) * 3);
@@ -28,14 +59,22 @@ void Renderer::draw(Display &d, const Game &g) {
       }
     for (auto &e : g.enemies)
       if (e.active) {
-        const Sprite *s = e.kind == EnemyKind::Scout     ? &scout
-                          : e.kind == EnemyKind::Fighter ? &fighter
-                          : e.kind == EnemyKind::Gunship ? &gunship
-                                                         : &asteroid;
+        const Sprite *s = e.kind == EnemyKind::Scout         ? &scout
+                          : e.kind == EnemyKind::Fighter     ? &fighter
+                          : e.kind == EnemyKind::Gunship     ? &gunship
+                          : e.kind == EnemyKind::Interceptor ? &interceptor
+                          : e.kind == EnemyKind::Mine        ? &mine
+                          : e.kind == EnemyKind::Turret      ? &turret
+                                                             : &asteroid;
         d.sprite(int(e.pos.x), int(e.pos.y), *s);
+        if (e.kind == EnemyKind::Mine && int(e.age * 5) % 2 == 0)
+          d.rect(int(e.pos.x) - 2, int(e.pos.y) - 2, 4, 4, White);
       }
     if (g.boss.active) {
-      d.sprite(int(g.boss.pos.x), int(g.boss.pos.y), boss);
+      d.sprite(int(g.boss.pos.x), int(g.boss.pos.y),
+               g.level == 1   ? warden
+               : g.level == 2 ? carrier
+                              : boss);
       if (g.boss.phase == 2) {
         d.rect(int(g.boss.pos.x) - 7, int(g.boss.pos.y) - 7, 14, 14, Pink);
         d.rect(int(g.boss.pos.x) - 3, int(g.boss.pos.y) - 3, 6, 6, White);
@@ -77,37 +116,45 @@ void Renderer::draw(Display &d, const Game &g) {
       d.rect(166 + i * 14, 12, 9, 9, i < g.shields ? Cyan : Blue);
     snprintf(text, sizeof(text), "BOMB %d   CANNON %d", g.bombs, g.power);
     d.text(231, 9, text, White);
-    int section = g.stageTime < 42    ? 1
-                  : g.stageTime < 105 ? 2
-                  : g.stageTime < 165 ? 3
-                  : g.stageTime < 215 ? 4
-                  : g.stageTime < 265 ? 5
-                                      : 6;
-    snprintf(text, sizeof(text), "%02d", section);
+    snprintf(text, sizeof(text), "L%d", g.level);
     d.text(445, 9, text, Gold);
     d.rect(0, 278, 480, 42, color(0x050919));
     if (g.screen == Screen::Playing) {
       if (g.boss.active) {
-        d.text(10, 286, g.boss.phase == 1 ? "DREADNAUGHT" : "EXPOSED CORE", Pink);
+        d.text(10, 286, g.boss.phase == 1 ? g.bossName() : "EXPOSED CORE", Pink);
         d.rect(150, 291, 315, 7, Blue);
-        d.rect(150, 291, int(315 * std::max(0, g.boss.hp) / 1500.f), 7,
+        d.rect(150, 291, int(315 * std::max(0, g.boss.hp) / float(g.boss.maxHp)), 7,
                g.boss.phase == 1 ? Gold : Pink);
       } else if (g.bannerTime > 0)
         d.text(10, 287, g.banner, Gold);
       else
-        d.text(10, 287, "A FIRE     B BOMB     MENU PAUSE", color(0x749ac0));
+        d.text(10, 287, "A FIRE   B BOMB   MENU PAUSE", color(0x749ac0));
+      char rankText[32];
+      if (g.rank == 4)
+        snprintf(rankText, sizeof(rankText), "PILOT 4  ACE");
+      else
+        snprintf(rankText, sizeof(rankText), "PILOT %d  XP %d/%d", g.rank, g.experience,
+                 g.rank * 1400);
+      d.text(10, 302, rankText, Cyan);
+      d.text(260, 302, g.levelName(), color(0x749ac0));
     }
   }
-  if (g.screen == Screen::Playing)
+  if (g.screen == Screen::Playing) {
+    if (g.transition > 0) {
+      d.rect(74, 113, 332, 69, color(0x102044));
+      d.text(109, 125, "SECTOR CLEAR", Cyan, 2);
+      d.text(114, 158, "SHIELD +1 / NEXT SECTOR INBOUND", Gold);
+    }
     return;
+  }
   if (g.screen == Screen::Title || g.screen == Screen::Connection) {
     d.text(55, 60, "STARBREAK", White, 3);
-    d.text(58, 108, "ONE SHIP. ONE CHANCE TO BREAK THROUGH.", Cyan);
+    d.text(58, 108, "THREE SECTORS. BREAK THE BLOCKADE.", Cyan);
   } else {
     d.rect(52, 47, 376, 232, color(0x050919));
     d.text(89, 70,
            g.screen == Screen::Pause     ? "FLIGHT PAUSED"
-           : g.screen == Screen::Victory ? "SECTOR CLEAR"
+           : g.screen == Screen::Victory ? "BLOCKADE BROKEN"
                                          : "SIGNAL LOST",
            g.screen == Screen::Victory ? Cyan : Pink, 2);
   }

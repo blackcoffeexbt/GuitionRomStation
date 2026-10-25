@@ -25,3 +25,7 @@ Required evidence:
 - Target 30 FPS; minimum sustained 25 FPS in busiest scripted encounter with Bluetooth and audio active. Synthetic diagnostic stress alone does not satisfy stage acceptance.
 
 Do not mark the hardware gate or final game accepted using a host simulation, unpaired radio, serial-injected gameplay or a screenshot alone.
+
+## Expansion requested after the initial demo
+
+The user requested additional baddies, level-ups, end-of-level bosses and terrain, retaining the compact sprite scale. The campaign now spans three sectors with different scenery and bosses, seven enemy/hazard types, XP-based pilot ranks and collidable canyon/station boundaries. The existing controller, storage isolation and performance gates still apply.

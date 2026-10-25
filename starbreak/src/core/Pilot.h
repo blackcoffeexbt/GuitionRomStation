@@ -52,6 +52,8 @@ inline Input pilot(const Game &g, bool lose = false) {
     float bestCost = 1e20f, bestY = targetY;
     for (int candidate = 0; candidate < 22; candidate++) {
       float y = 58 + candidate * 9.5f, cost = std::abs(y - targetY) * .33f;
+      if (y < g.terrainTop(g.player.x) + 24 || y > g.terrainBottom(g.player.x) - 24)
+        cost += 100000;
       // Score the real movement trajectory, not just a desired future lane.
       float vx = std::clamp((targetX - g.player.x) * 3.f, -165.f, 165.f),
             vy = std::clamp((y - g.player.y) * 3.f, -165.f, 165.f);
@@ -71,10 +73,13 @@ inline Input pilot(const Game &g, bool lose = false) {
       for (auto &e : g.enemies)
         if (e.active) {
           for (float t = .1f; t < 1.25f; t += .2f) {
-            float speed = e.kind == EnemyKind::Scout     ? 62
-                          : e.kind == EnemyKind::Fighter ? 76
-                          : e.kind == EnemyKind::Gunship ? 39
-                                                         : 69;
+            float speed = e.kind == EnemyKind::Scout         ? 62
+                          : e.kind == EnemyKind::Fighter     ? 76
+                          : e.kind == EnemyKind::Gunship     ? 39
+                          : e.kind == EnemyKind::Interceptor ? 112
+                          : e.kind == EnemyKind::Mine        ? 52
+                          : e.kind == EnemyKind::Turret      ? 48
+                                                             : 69;
             float dx = std::abs(e.pos.x - speed * t - g.player.x),
                   py = g.player.y + std::clamp(vy * t, std::min(0.f, y - g.player.y),
                                                std::max(0.f, y - g.player.y));
