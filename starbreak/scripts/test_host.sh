@@ -10,3 +10,5 @@ c++ -std=c++17 -O2 -Wall -Wextra -Isrc src/core/Game.cpp test/game.cpp -o .build
 .build/game-tests
 c++ -std=c++17 -O2 -Wall -Wextra -Isrc src/core/Game.cpp test/timing.cpp -o .build/timing-tests
 .build/timing-tests
+c++ -std=c++17 -O2 -Wall -Wextra -Isrc src/core/Game.cpp test/allocation.cpp -o .build/allocation-tests
+.build/allocation-tests

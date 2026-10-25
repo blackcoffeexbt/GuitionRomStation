@@ -46,7 +46,7 @@ pio run -d starbreak -e validation -t upload --upload-port /dev/cu.usbmodem101
 python3 starbreak/scripts/soak.py --minutes 32
 ```
 
-The final delivery uses `guition`, with the pilot and corruption hooks excluded. See docs/VALIDATION.md for measured results and limits. USB normal-build commands: `status`, `pair`, `mute`, `reboot`. Every three seconds `PERF` reports frame times, memory, controller status and stage/pool counts. The validation build additionally accepts `autoplay`, `defeat` and `corrupt_settings`.
+The final delivery uses `guition`, with the pilot and corruption hooks excluded. See docs/VALIDATION.md for measured results and limits. **The full 30-minute endurance acceptance remains pending because the controller was disconnected after a test restart.** One full physical-board victory run and a defeat/retry path are verified; do not treat the endurance gate as passed yet. USB normal-build commands: `status`, `pair`, `mute`, `reboot`. Every three seconds `PERF` reports frame times, memory, controller status and stage/pool counts. The validation build additionally accepts `autoplay`, `defeat` and `corrupt_settings`.
 
 ## Project layout
 

@@ -25,10 +25,20 @@ Host checks cover:
 
 A preliminary physical-board run reached victory in 304.07 simulation seconds, with both upgrades and the second boss phase. Normal gameplay rules, damage and collision were active. A deliberate-loss run exercised the real defeat-to-retry path. The initial result-screen hold in the test pilot was too short for reliable webcam capture, so the final endurance run was restarted after fixing only that harness timing and an end-of-tick score guard.
 
-## Final endurance run
+## Endurance acceptance — still pending
 
-In progress. The validation build's deterministic pilot supplies ordinary controls while the actual Xbox Bluetooth link stays connected. It grants no immunity, resources, score or accelerated time. Enemies, collisions, shields, upgrades, bomb and boss logic are identical to the normal game. The pilot and settings-corruption command are excluded from the final `guition` firmware.
+The full 30-minute flight test is not complete. After restarting the test firmware, the Xbox was disconnected and the board remained safely at the title screen; a request to switch it back on was left pending. Waiting time was excluded from actual flight ticks. The waiting readers were stopped and the normal controller-operated game was installed for delivery.
 
-Raw local evidence is written under `starbreak/device-review/`: controller-check.log, reconnect-check.log, preliminary-runs.log, soak.log and the generated summary. Actual webcam captures are kept separately from host previews. Final results will be recorded here after the run and settings/reboot checks.
+The preliminary connected run exercised victory and defeat/retry, with approximately 7.5 minutes of observed activity. Gameplay FPS ranged from 29.4 to about 30.3 in those samples; free internal heap stayed at 71,904 bytes, including across result/settings saves. These observations support the design but do not substitute for the required 30-minute repeated-play acceptance.
+
+ The validation build's deterministic pilot supplies ordinary controls while the actual Xbox Bluetooth link stays connected. It grants no immunity, resources, score or accelerated time. Enemies, collisions, shields, upgrades, bomb and boss logic are identical to the normal game. The pilot and settings-corruption command are excluded from the final `guition` firmware.
+
+Raw local evidence is written under `starbreak/device-review/`: controller-check.log, reconnect-check.log, preliminary-runs.log, soak.log and the generated summary. Actual webcam captures are kept separately from host previews. The remaining requirement is a fresh, measured 30 minutes of actual flight with the Xbox connected; `scripts/soak.py` now counts 60 Hz flight ticks rather than controller-off wall time. It also accepts `--resume` to retain a live run/log.
 
 Farm isolation: the partition table remains byte-for-byte identical to Little Wilds. The shooter never mounts/writes LittleFS and does not access SD. Score/mute use NVS namespace `starbreak`; Bluetooth pairing uses its own keys. No flash erase/filesystem image upload is used.
+
+## Shooter settings checked on the physical board
+
+High score 25,720 survived firmware restart. Mute was changed to on, saved, and restored on reboot. Corrupting the newest shooter-only record caused the previous valid record to load with the same best score and its coherent mute setting. Both records were then replaced with valid settings, sound restored on, and another reboot loaded cleanly without a recovery warning. These tests touched only NVS namespace `starbreak`; the farm filesystem and SD were not accessed.
+
+Final host checks also verify the entire stage performs no C++ heap allocations. The normal build compiles successfully; AddressSanitizer/UndefinedBehaviorSanitizer checks pass for the portable simulation and collision code. Normal firmware size is approximately 708 KB, with approximately 81 KB statically allocated internal RAM plus the 153.6 KB runtime drawing buffer.
