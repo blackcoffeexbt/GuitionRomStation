@@ -8,6 +8,7 @@ struct Vec2 {
 };
 struct Input {
   bool fresh = false, connected = false, fire = false, bomb = false, menu = false;
+  bool nextWeapon = false, previousWeapon = false;
   float x = 0, y = 0;
   uint32_t sampledAt = 0;
 };

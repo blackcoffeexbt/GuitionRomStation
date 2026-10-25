@@ -54,6 +54,8 @@ void ControllerInput::update() {
   input.y = direction.y;
   input.fire = pad->a();
   input.bomb = pad->b();
+  input.nextWeapon = pad->x();
+  input.previousWeapon = pad->y();
   input.menu = pad->miscStart();
   input.sampledAt = lastPacket;
 }

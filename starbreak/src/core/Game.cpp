@@ -34,10 +34,19 @@ void Game::receive(Input state) {
   if (!connected) {
     input.x = input.y = 0;
     input.fire = input.bomb = input.menu = false;
+    input.nextWeapon = input.previousWeapon = false;
+    fireCharge = 0;
   }
   if (connected && state.fresh && !state.fire && !state.menu)
     resumeArmed = true;
   bool a = input.fire && !previousA, b = input.bomb && !previousB, m = input.menu && !previousMenu;
+  bool next = input.nextWeapon && !previousNext, prev = input.previousWeapon && !previousPrev;
+  previousNext = input.nextWeapon;
+  previousPrev = input.previousWeapon;
+  if (connected && (screen == Screen::Playing || screen == Screen::Pause || screen == Screen::Title)) {
+    if (next) selectWeapon(1);
+    else if (prev) selectWeapon(-1);
+  }
   previousA = input.fire;
   previousB = input.bomb;
   previousMenu = input.menu;
@@ -82,6 +91,21 @@ void Game::start() {
   shields = 3;
   bombs = 1;
   power = 1;
+  // Keep a title-screen weapon choice; reset progression, powers and runtime pools.
+  buffs = {};
+  modules = 0;
+  for (auto &m : shotInfo) m = {};
+  for (auto &b : beams) b = {};
+  for (auto &b : blasts) b = {};
+  for (auto &f : fields) f = {};
+  mirrorHistory.fill(player);
+  mirrorPosition = player;
+  mirrorIndex = 0;
+  lootIndex = kills = 0;
+  lootTimer = 12;
+  orbTimer = fireCharge = heat = 0;
+  heatTarget = -2;
+  shotSerial = 0;
   score = 0;
   stageTime = levelTime = transition = 0;
   level = rank = 1;
@@ -169,9 +193,9 @@ void Game::tap(Vec2 p) {
     back();
 }
 void Game::grantUpgrade() {
-  if (power < 3) {
+  if (power < 5) {
     ++power;
-    message(power == 2 ? "CANNON II - TWIN STREAM" : "CANNON III - STARLANCE", 4);
+    message(power == 5 ? "WEAPON V - MAXIMUM POWER" : power == 4 ? "WEAPON IV - OVERCHARGED" : power == 3 ? "WEAPON III - AMPLIFIED" : "WEAPON II - TWIN POWER", 4);
     cue(Cue::Pickup);
   }
 }
@@ -292,7 +316,9 @@ void Game::particles(Vec2 p, int count, uint8_t color) {
     }
 }
 void Game::kill(Enemy &e, bool addScore) {
+  if (!e.active) return;
   e.active = false;
+  if (addScore && ++kills % 3 == 0) drop(e.pos, PickupKind::Crystal);
   if (addScore) {
     uint32_t before = score;
     score += e.kind == EnemyKind::Scout         ? 100
@@ -314,23 +340,22 @@ void Game::enemyShot(Vec2 p, Vec2 velocity, float radius) {
     }
 }
 void Game::fire() {
-  int count = power == 1 ? 1 : power == 2 ? 2 : 3;
-  for (int lane = 0; lane < count; lane++)
-    for (auto &b : shots)
-      if (!b.active) {
-        float offset = count == 1 ? 0 : count == 2 ? (lane ? 5 : -5) : float(lane - 1) * 8;
-        float vy = power == 3 ? float(lane - 1) * 26 : 0;
-        Vec2 p{player.x + 19, player.y + offset};
-        b = {true, p, p, {440, vy}, 2, power};
-        break;
-      }
+  fireWeapon({player.x + 16, player.y});
+  if (buffs.mirror > 0) fireWeapon({mirrorPosition.x + 16, mirrorPosition.y}, true);
   cue(Cue::Fire);
 }
 void Game::hitPlayer() {
   if (invulnerable > 0 || screen != Screen::Playing)
     return;
+  if (buffs.bubble > 0) {
+    --buffs.bubble;
+    invulnerable = .4f;
+    particles(player, 8, 0);
+    cue(Cue::Impact);
+    return;
+  }
   --shields;
-  invulnerable = 1.5f;
+  invulnerable = 1.2f;
   particles(player, 12, 2);
   cue(Cue::Impact);
   if (shields <= 0)
@@ -510,36 +535,7 @@ void Game::updateBoss(float dt) {
   }
 }
 void Game::updateShots(float dt) {
-  for (auto &b : shots)
-    if (b.active) {
-      b.previous = b.pos;
-      b.pos.x += b.velocity.x * dt;
-      b.pos.y += b.velocity.y * dt;
-      for (auto &e : enemies)
-        if (e.active) {
-          auto box = enemyBox(e);
-          box.x = box.y = 0;
-          if (swept({b.previous.x - e.previous.x, b.previous.y - e.previous.y},
-                    {b.pos.x - e.pos.x, b.pos.y - e.pos.y}, b.radius, box)) {
-            b.active = false;
-            e.hp -= b.damage;
-            particles(b.pos, 2, 0);
-            if (e.hp <= 0)
-              kill(e);
-            break;
-          }
-        }
-      if (b.active && boss.active && boss.age > 2 &&
-          swept({b.previous.x - boss.previous.x, b.previous.y - boss.previous.y},
-                {b.pos.x - boss.pos.x, b.pos.y - boss.pos.y}, b.radius,
-                {0, 0, bossBox().halfW, bossBox().halfH})) {
-        b.active = false;
-        boss.hp -= b.damage;
-        particles(b.pos, 2, 0);
-      }
-      if (b.pos.x > 500 || b.pos.y < 42 || b.pos.y > 280)
-        b.active = false;
-    }
+  updatePlayerShots(dt);
   for (auto &b : enemyShots)
     if (b.active) {
       b.previous = b.pos;
@@ -580,6 +576,7 @@ void Game::update(float dt) {
     return;
   }
   levelTime += dt;
+  updateArsenal(dt);
   invulnerable = std::max(0.f, invulnerable - dt);
   bombFlash = std::max(0.f, bombFlash - dt);
   previousPlayer = player;
@@ -595,7 +592,9 @@ void Game::update(float dt) {
   fireTimer -= dt;
   if (input.fire && fireTimer <= 0) {
     fire();
-    fireTimer = rank == 4 ? .105f : rank >= 2 ? .12f : .135f;
+    float cadence = rank == 4 ? .84f : rank >= 2 ? .92f : 1.f;
+    fireTimer = definition(weapon).interval * cadence * (buffs.overdrive > 0 ? .5f : 1.f);
+    if (weapon == Weapon::Pulse) fireTimer *= 1.f - (power-1)*.07f;
   }
   waveTimer -= dt;
   if (waveTimer <= 0 && levelTime < 70)
@@ -615,13 +614,13 @@ void Game::update(float dt) {
       p.pos.x -= 66 * dt;
       float dx = player.x - p.pos.x, dy = player.y - p.pos.y;
       float dist = std::hypot(dx, dy);
-      if (dist < 60 && dist > 1) {
-        p.pos.x += dx / dist * 110 * dt;
-        p.pos.y += dy / dist * 110 * dt;
+      if (dist < (buffs.magnet > 0 ? 480 : 60) && dist > 1) {
+        p.pos.x += dx / dist * (buffs.magnet > 0 ? 230 : 110) * dt;
+        p.pos.y += dy / dist * (buffs.magnet > 0 ? 230 : 110) * dt;
       }
       if (overlaps({p.pos.x, p.pos.y, 10, 10}, playerBox())) {
         p.active = false;
-        grantUpgrade();
+        collect(p.kind, p.value);
       }
       if (p.pos.x < -20)
         p.active = false;
@@ -640,10 +639,10 @@ void Game::update(float dt) {
             5);
   }
 
-  updateEnemies(dt);
+  updateEnemies(dt * (buffs.timeWarp > 0 ? .42f : 1.f));
   if (screen != Screen::Playing)
     return;
-  updateBoss(dt);
+  updateBoss(dt * (buffs.timeWarp > 0 ? .55f : 1.f));
   if (screen != Screen::Playing)
     return;
   updateShots(dt);

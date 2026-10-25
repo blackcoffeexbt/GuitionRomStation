@@ -1,5 +1,6 @@
 #pragma once
 #include "Collision.h"
+#include "Arsenal.h"
 #include <array>
 namespace sb {
 enum class Screen : uint8_t { Title, Connection, Playing, Pause, GameOver, Victory };
@@ -22,6 +23,8 @@ struct Pickup {
   bool active = false;
   Vec2 pos{};
   float age = 0;
+  PickupKind kind = PickupKind::Upgrade;
+  uint8_t value = 0;
 };
 struct Effect {
   bool active = false;
@@ -40,7 +43,25 @@ class Game {
   int waveIndex = 0;
   bool previousA = false, previousB = false, previousMenu = false, resumeArmed = false,
        wasConnected = false;
-  int upgradeSpawned = 0;
+  int upgradeSpawned = 0, lootIndex = 0, kills = 0;
+  float lootTimer = 12, orbTimer = 0, fireCharge = 0, heat = 0;
+  int heatTarget = -2;
+  bool previousNext = false, previousPrev = false;
+  uint32_t shotSerial = 0;
+  uint8_t mirrorIndex = 0;
+  std::array<Vec2, 30> mirrorHistory{};
+  void updateArsenal(float dt);
+  void updatePlayerShots(float dt);
+  void fireWeapon(Vec2 origin, bool echo = false, bool charged = false);
+  void arc(Vec2 origin, int damage, int links, float range);
+  void ray(Vec2 from, Vec2 to, int damage, float width, uint32_t color, bool prism = false);
+  int target(Vec2 origin, float range, uint32_t excluded = 0) const;
+  Vec2 targetPosition(int index) const;
+  bool damageTarget(int index, int damage, Weapon source);
+  void blast(Vec2 pos, int damage, float radius, bool chain = false, bool gravity = false);
+  void field(Vec2 pos, Weapon kind);
+  Bullet *projectile(Vec2 origin, Vec2 velocity, int damage, float radius, Weapon kind, float life = 2);
+  void drop(Vec2 pos, PickupKind kind, uint8_t value = 0);
   void spawnWave();
   void updateEnemies(float dt);
   void updateBoss(float dt);
@@ -61,7 +82,15 @@ public:
   std::array<Enemy, EnemyCapacity> enemies{};
   std::array<Bullet, ShotCapacity> shots{};
   std::array<Bullet, EnemyShotCapacity> enemyShots{};
-  std::array<Pickup, 4> pickups{};
+  std::array<Pickup, 12> pickups{};
+  std::array<ShotInfo, ShotCapacity> shotInfo{};
+  std::array<Beam, 24> beams{};
+  std::array<Blast, 12> blasts{};
+  std::array<Field, 6> fields{};
+  Weapon weapon = Weapon::Pulse;
+  Buffs buffs{};
+  uint32_t modules = 0;
+  Vec2 mirrorPosition{68,160};
   std::array<Effect, EffectCapacity> effects{};
   Screen screen = Screen::Title;
   Vec2 player{68, 160}, previousPlayer{68, 160};
@@ -93,6 +122,13 @@ public:
     bannerTime = seconds;
   }
   void grantUpgrade();
+  void selectWeapon(int direction);
+  void applyPowerUp(PowerUp kind);
+  void collect(PickupKind kind, uint8_t value = 0);
+  bool hasModule(Weapon kind) const { return modules & (1u << int(kind)); }
+  float chargeLevel() const { return fireCharge / 1.4f; }
+  float heatLevel() const { return heat / 2.f; }
+  Vec2 satellitePosition(int index, bool mirror = false) const;
   const char *levelName() const;
   const char *bossName() const;
   // Shared collision/rendering boundaries. Terrain retracts before each boss.
