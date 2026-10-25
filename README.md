@@ -2,7 +2,17 @@
 
 Run Sega Master System `.sms` ROMs from a microSD card on the **Guition JC3248W535 / JC3248W535C ESP32-S3** board, with an Xbox Series X/S controller and the board’s speaker. The firmware works offline; no ROM is embedded or downloaded.
 
-The SMSPlus core is adapted from [hi631/esp32-smsemu](https://github.com/hi631/esp32-smsemu). The repository now contains only this emulator project. Earlier Little Wilds and Starbreak projects remain available in Git history; `48ef526` is the working SD-loader checkpoint before repository cleanup.
+Built on the SMSPlus core from [hi631/esp32-smsemu](https://github.com/hi631/esp32-smsemu), with a touchscreen ROM browser, Bluetooth controller support and I²S audio.
+
+## Hardware requirements
+
+- Guition JC3248W535 / JC3248W535C with ESP32-S3, 16 MB flash and 8 MB OPI PSRAM.
+- AXS15231B QSPI display and capacitive touch, used in 480 × 320 landscape orientation.
+- Xbox Series X/S controller with Bluetooth support.
+- FAT32 microSD card and USB data cable.
+- Speaker connected to the board’s speaker port for audio.
+
+Display, touch, audio and SD wiring are documented in [hardware notes](docs/HARDWARE.md) and [BoardConfig.h](include/BoardConfig.h). Other boards and controllers are not validated.
 
 ## Play
 
@@ -11,15 +21,15 @@ Use a FAT32 microSD card with uncompressed `.sms` files in `/roms/sms/`. If that
 | Control | Action |
 | --- | --- |
 | Left stick / D-pad | SMS directions |
-| A | SMS button 1; shot/charge in R-Type |
-| B | SMS button 2; Force pod in R-Type |
+| A | SMS button 1 / confirm menu selection |
+| B | SMS button 2 / return from library |
 | X during play | Rapid fire |
 | Menu | Pause / resume |
 | X while paused | Open ROM library |
 | Y while paused | Reset game |
 | Touch | Library, pause/resume and mute |
 
-Pairing is remembered. Hold the Xbox Pair button if it does not connect automatically. A lost connection freezes emulation and clears input. Release A, then press it again to resume after reconnecting. There are no touchscreen gameplay controls.
+Turn on the controller and hold its Pair button until the Xbox light flashes rapidly. Pairing is remembered for subsequent connections. A game selected without a connected controller waits paused. A lost connection freezes emulation and clears input. Release A, then press it again to resume after reconnecting. There are no touchscreen gameplay controls.
 
 The picture is scaled to 426 × 320, preserving the original 4:3 aspect on the 480 × 320 landscape display. Sound is emulated SN76496 PSG audio through the built-in I²S amplifier.
 
@@ -30,14 +40,12 @@ Install Python 3 and PlatformIO Core. Run from this repository’s root:
 ```sh
 python3 scripts/bootstrap.py
 pio run
-pio run -t upload --upload-port /dev/cu.usbmodem101
+pio run -t upload --upload-port <PORT>
 ```
 
-Choose the board’s actual USB port if it differs. Bootstrap prepares a checksum-pinned official Bluepad32 Arduino package in `.deps/`. PlatformIO pins Espressif32 6.10.0, Bluepad32 4.1.0 / Arduino ESP32 2.0.17, Arduino_GFX 1.5.9 and C++17. No game image is needed to compile.
+Replace `<PORT>` with the board’s serial port, such as `/dev/cu.usbmodem101` on macOS, `/dev/ttyACM0` on Linux or `COM3` on Windows. Bootstrap prepares a checksum-pinned official Bluepad32 Arduino package in `.deps/`. PlatformIO pins Espressif32 6.10.0, Bluepad32 4.1.0 / Arduino ESP32 2.0.17, Arduino_GFX 1.5.9 and C++17. No game image is needed to compile.
 
-Target hardware: ESP32-S3, 16 MB flash, 8 MB OPI PSRAM, AXS15231B QSPI display and capacitive touch. Verified display, touch, audio and SD pins are in [hardware notes](docs/HARDWARE.md) and [BoardConfig.h](include/BoardConfig.h).
-
-Upload the application only. The partition layout is retained so existing LittleFS data survives; the emulator does not mount that partition. Mute is stored separately in the `rtype-sms` NVS namespace.
+The standard build uses real controller input. Upload the application with the command above; a filesystem upload is not required. The firmware reads ROMs from SD and stores the mute setting in NVS. It does not use LittleFS for game storage.
 
 ## ROM compatibility
 
@@ -63,11 +71,11 @@ python3 scripts/bootstrap.py --rom '/full/path/to/game.sms'
 
 Use the supplied board checker for serial observations: it avoids USB reset-line toggles that can interrupt gameplay. USB commands include `status`, `pair`, `pause`, `resume`, `reset`, `mute`, `library`, `rescan` and `load N` (zero-based library index). After loading a game and pausing outside the library, `--bench` runs one eight-second intro diagnostic and pauses automatically.
 
-Alex Kidd, Sonic and R-Type were loaded from the attached SD card and reached gameplay, verified by webcam with simulated controller reports. Movement, buttons, pause and reconnect safeguards passed for all three. Short samples measured about 60 emulated FPS and 25.5–29.3 displayed FPS, with no resets or audio-write errors. The normal Xbox build is installed. These checks do not certify complete-game compatibility, endurance or physical radio latency. Earlier manual R-Type play confirmed Xbox controls and sound. Detailed evidence and limits are in [validation notes](docs/VALIDATION.md).
+The emulator targets 60 Hz independently of the display. Short hardware checks measured approximately 60 emulated FPS and 25–29 displayed FPS, depending on the scene. Complete-game compatibility, long-term stability and controller latency have not been comprehensively validated. See [validation notes](docs/VALIDATION.md) for test coverage and limitations.
 
-The optional `validation` build enables USB input simulation for the explicit `scripts/test_controller_live.py` development check. Normal builds exclude simulated controls. No background test runs at boot.
+For development, the optional `validation` build enables USB input simulation used by `scripts/test_controller_live.py`. This script expects the three-game test library described in the validation notes; it is not a general compatibility test. Normal builds exclude simulated controls.
 
-## Layout
+## Project layout
 
 | Path | Purpose |
 | --- | --- |
@@ -81,4 +89,6 @@ The optional `validation` build enables USB input simulation for the explicit `s
 | `docs/` | Hardware and validation notes |
 | `roms/`, `type-r/` | Ignored private local ROM inputs |
 
-See [third-party source and licensing](THIRD_PARTY.md), including the CPU core’s individual license terms.
+## Credits and licensing
+
+See [third-party source and licensing](THIRD_PARTY.md) for source revisions and individual license terms. These include GPL notices for SMSPlus, separate non-commercial/freeware terms for the Z80 CPU core, and the DejaVu font notice. Do not assume a single license applies to every component.
