@@ -1,0 +1,5 @@
+.deps/
+.pio/
+.build/
+device-review/
+roms/
